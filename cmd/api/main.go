@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/joefazee/neo/app/user"
+
 	"github.com/joefazee/neo/app/markets"
 	"github.com/joefazee/neo/app/prediction"
 
@@ -80,6 +82,9 @@ func setupRoutes(r *gin.RouterGroup, db *gorm.DB) {
 	}
 
 	r.GET("/healthz", api.HealthCheck)
+	user.Init(r, user.Dependencies{
+		DB: db,
+	})
 	countries.Init(r, deps)
 	categories.Init(r, deps)
 	markets.Init(r, markets.Dependencies{DB: db, Config: nil})

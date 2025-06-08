@@ -29,54 +29,45 @@ type Config struct {
 	BetCancellationWindow           time.Duration   `env:"BET_CANCELLATION_WINDOW"`
 }
 
-// Validate validates the betting configuration
 func (c *Config) Validate() error {
-	if c.MinBetAmount.LessThanOrEqual(decimal.Zero) {
-		return models.ErrInvalidBetAmountLimits
+	type validation struct {
+		ok  bool
+		err error
 	}
 
-	if c.MaxBetAmount.LessThanOrEqual(c.MinBetAmount) {
-		return models.ErrInvalidBetAmountLimits
+	maxImpact := decimal.NewFromInt(100)
+
+	checks := []validation{
+		{c.MinBetAmount.GreaterThan(decimal.Zero), models.ErrInvalidBetAmountLimits},
+		{c.MaxBetAmount.GreaterThan(c.MinBetAmount), models.ErrInvalidBetAmountLimits},
+
+		{c.MaxSlippagePercentage.GreaterThanOrEqual(decimal.Zero) &&
+			c.MaxSlippagePercentage.LessThanOrEqual(maxImpact),
+			models.ErrInvalidSlippageLimit},
+
+		{c.MaxPositionPerUser.GreaterThan(decimal.Zero), models.ErrInvalidPositionLimit},
+
+		{c.BetTimeoutSeconds > 0 && c.BetTimeoutSeconds <= 300, models.ErrInvalidBetTimeout},
+		{c.MaxBetsPerMinute > 0 && c.MaxBetsPerMinute <= 100, models.ErrInvalidRateLimit},
+
+		{c.CooldownPeriod >= 0, models.ErrInvalidCooldownPeriod},
+		{c.BetCancellationWindow >= 0, models.ErrInvalidBetCancellationWindow},
+
+		{c.SignificantPriceImpactThreshold.GreaterThan(decimal.Zero) &&
+			c.ModeratePriceImpactThreshold.GreaterThan(decimal.Zero) &&
+			c.HighPriceImpactThreshold.GreaterThan(decimal.Zero),
+			models.ErrInvalidPriceImpactThresholds},
+		{c.SignificantPriceImpactThreshold.LessThanOrEqual(maxImpact) &&
+			c.ModeratePriceImpactThreshold.LessThanOrEqual(maxImpact) &&
+			c.HighPriceImpactThreshold.LessThanOrEqual(maxImpact),
+			models.ErrInvalidPriceImpactThresholds},
 	}
 
-	if c.MaxSlippagePercentage.LessThan(decimal.Zero) || c.MaxSlippagePercentage.GreaterThan(decimal.NewFromInt(100)) {
-		return models.ErrInvalidSlippageLimit
+	for _, v := range checks {
+		if !v.ok {
+			return v.err
+		}
 	}
-
-	if c.MaxPositionPerUser.LessThanOrEqual(decimal.Zero) {
-		return models.ErrInvalidPositionLimit
-	}
-
-	if c.BetTimeoutSeconds <= 0 || c.BetTimeoutSeconds > 300 {
-		return models.ErrInvalidBetTimeout
-	}
-
-	if c.MaxBetsPerMinute <= 0 || c.MaxBetsPerMinute > 100 {
-		return models.ErrInvalidRateLimit
-	}
-
-	if c.CooldownPeriod < 0 {
-		return models.ErrInvalidCooldownPeriod
-	}
-
-	if c.SignificantPriceImpactThreshold.LessThanOrEqual(decimal.Zero) ||
-		c.ModeratePriceImpactThreshold.LessThanOrEqual(decimal.Zero) ||
-		c.HighPriceImpactThreshold.LessThanOrEqual(decimal.Zero) {
-		return models.ErrInvalidPriceImpactThresholds
-	}
-
-	maxImpact := decimal.NewFromFloat(100.0)
-
-	if c.SignificantPriceImpactThreshold.GreaterThan(maxImpact) ||
-		c.ModeratePriceImpactThreshold.GreaterThan(maxImpact) ||
-		c.HighPriceImpactThreshold.GreaterThan(maxImpact) {
-		return models.ErrInvalidPriceImpactThresholds
-	}
-
-	if c.BetCancellationWindow < 0 {
-		return models.ErrInvalidBetCancellationWindow
-	}
-
 	return nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -206,4 +207,23 @@ func (u *User) MaskSensitiveData() *User {
 		masked.Phone = "***" + masked.Phone[len(masked.Phone)-4:]
 	}
 	return &masked
+}
+
+func IsEmail(identity string) bool {
+	return identity != "" && strings.Contains(identity, "@") && strings.Contains(identity, ".")
+}
+
+func CheckPasswordHash(password, hash string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+}
+
+func HashPassword(password string) (string, error) {
+	if len(password) < 8 {
+		return "", ErrPasswordTooShort
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hash), nil
 }

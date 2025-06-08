@@ -160,7 +160,7 @@ func (s *service) determinePriceAndContracts(
 	if s.config.EnableSlippageProtection && !expectedPrice.IsZero() {
 		slippage := s.bettingEngine.CalculateSlippage(expectedPrice, price)
 		effectiveMaxSlippage := maxSlippage
-		if effectiveMaxSlippage.IsZero() { // If user didn't specify, use config default
+		if effectiveMaxSlippage.IsZero() {
 			effectiveMaxSlippage = s.config.MaxSlippagePercentage
 		}
 		if err = s.bettingEngine.ValidateSlippage(slippage, effectiveMaxSlippage); err != nil {
@@ -169,8 +169,6 @@ func (s *service) determinePriceAndContracts(
 	}
 
 	contracts = s.bettingEngine.CalculateContractsBought(amount, price)
-	// It's possible for contracts to be zero if amount is too small for the price.
-	// This is checked in PlaceBet before calling createBetTransaction.
 	return price, contracts, nil
 }
 
@@ -262,88 +260,125 @@ func (s *service) CancelBet(ctx context.Context, userID, betID uuid.UUID) error 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		repoTx := s.repo.WithTx(tx)
 
-		bet, err := repoTx.GetBetByID(ctx, betID)
+		// 1) fetch + validate all preconditions
+		bet, currency, err := s.fetchAndValidateCancel(ctx, repoTx, userID, betID)
 		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return models.ErrRecordNotFound
-			}
-			return fmt.Errorf("get bet for cancellation: %w", err)
+			return err
 		}
 
-		if bet.UserID != userID {
-			return models.ErrForbidden
+		// 2) perform the refund (all DB updates + wallet ops)
+		if err := s.executeRefund(ctx, repoTx, bet, currency); err != nil {
+			return err
 		}
 
-		if bet.Status != models.BetStatusActive {
-			return errors.New("bet is not active and cannot be canceled")
-		}
-
-		cancellationWindow := s.config.BetCancellationWindow
-		if cancellationWindow <= 0 { // Default if not configured or invalid
-			cancellationWindow = 5 * time.Minute
-		}
-		if time.Since(bet.CreatedAt) > cancellationWindow {
-			return fmt.Errorf("bet cancellation period of %v has expired", cancellationWindow)
-		}
-
-		if bet.Market == nil || bet.Market.Country == nil {
-			return errors.New("cannot process refund: missing market currency information")
-		}
-		currencyCode := bet.Market.Country.CurrencyCode
-
-		// --- Start Full Refund Logic (within transaction) ---
-		bet.Status = models.BetStatusRefunded
-		now := time.Now()
-		bet.SettledAt = &now
-		refundAmount := bet.Amount
-		bet.SettlementAmount = &refundAmount
-
-		if err := repoTx.UpdateBet(ctx, bet); err != nil {
-			return fmt.Errorf("update bet status to refunded: %w", err)
-		}
-
-		wallet, err := repoTx.GetUserWallet(ctx, userID, currencyCode)
-		if err != nil {
-			return fmt.Errorf("get user wallet for refund: %w", err)
-		}
-		originalWalletBalance := wallet.Balance
-
-		refundLedgerTx := models.CreateBetRefundTransaction(
-			userID, wallet.ID, refundAmount, originalWalletBalance, bet.ID,
-		)
-		if err := repoTx.CreateTransaction(ctx, refundLedgerTx); err != nil {
-			return fmt.Errorf("create refund ledger transaction: %w", err)
-		}
-
-		// Credit user's wallet
-		if err := wallet.Credit(refundAmount); err != nil {
-			return fmt.Errorf("in-memory wallet credit for refund: %w", err)
-		}
-		if err := repoTx.UpdateWallet(ctx, wallet); err != nil {
-			return fmt.Errorf("update wallet record for refund: %w", err)
-		}
-
-		// Adjust (decrement) market and outcome pools
-		if bet.MarketOutcome != nil {
-			marketToUpdate := bet.Market // Already preloaded with Country
-			outcomeToUpdate := bet.MarketOutcome
-
-			marketToUpdate.TotalPoolAmount = marketToUpdate.TotalPoolAmount.Sub(bet.Amount)
-			outcomeToUpdate.PoolAmount = outcomeToUpdate.PoolAmount.Sub(bet.Amount)
-
-			if err := repoTx.UpdateMarket(ctx, marketToUpdate); err != nil {
-				return fmt.Errorf("update market pool on refund: %w", err)
-			}
-			if err := repoTx.UpdateMarketOutcome(ctx, outcomeToUpdate); err != nil {
-				return fmt.Errorf("update outcome pool on refund: %w", err)
-			}
-		} else {
-			log.Printf("Warning: MarketOutcome data missing for bet %s during refund pool adjustment. Pools not adjusted.", bet.ID)
-			// This indicates a data integrity issue if an active bet doesn't have a valid outcome link.
-		}
-		log.Printf("Bet %s for user %s `canceled` and refunded %s", bet.ID, bet.UserID, bet.Amount.String())
+		log.Printf("Bet %s for user %s canceled and refunded %s",
+			bet.ID, bet.UserID, bet.Amount)
 		return nil
 	})
+}
+
+// fetchAndValidateCancel loads the bet and runs every single pre-refund check.
+// On error it returns the right models.Err… or fmt.Errorf wrap.
+func (s *service) fetchAndValidateCancel(
+	ctx context.Context,
+	repoTx Repository,
+	userID, betID uuid.UUID,
+) (*models.Bet, string, error) {
+	bet, err := repoTx.GetBetByID(ctx, betID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, "", models.ErrRecordNotFound
+		}
+		return nil, "", fmt.Errorf("get bet for cancellation: %w", err)
+	}
+	if bet.UserID != userID {
+		return nil, "", models.ErrForbidden
+	}
+	if bet.Status != models.BetStatusActive {
+		return nil, "", errors.New("bet is not active and cannot be canceled")
+	}
+
+	window := s.config.BetCancellationWindow
+	if window <= 0 {
+		window = 5 * time.Minute
+	}
+	if time.Since(bet.CreatedAt) > window {
+		return nil, "", fmt.Errorf(
+			"bet cancellation period of %v has expired", window,
+		)
+	}
+
+	if bet.Market == nil || bet.Market.Country == nil {
+		return nil, "", errors.New(
+			"cannot process refund: missing market currency information",
+		)
+	}
+
+	return bet, bet.Market.Country.CurrencyCode, nil
+}
+
+// executeRefund does all of the DB + wallet + pool updates for the refund.
+// It returns the first error it encounters, exactly as before.
+func (s *service) executeRefund(
+	ctx context.Context,
+	repoTx Repository,
+	bet *models.Bet,
+	currencyCode string,
+) error {
+	// 1) mark refunded
+	bet.Status = models.BetStatusRefunded
+	now := time.Now()
+	bet.SettledAt = &now
+	amount := bet.Amount
+	bet.SettlementAmount = &amount
+
+	if err := repoTx.UpdateBet(ctx, bet); err != nil {
+		return fmt.Errorf("update bet status to refunded: %w", err)
+	}
+
+	// 2) ledger tx
+	wallet, err := repoTx.GetUserWallet(ctx, bet.UserID, currencyCode)
+	if err != nil {
+		return fmt.Errorf("get user wallet for refund: %w", err)
+	}
+	original := wallet.Balance
+
+	refundTx := models.CreateBetRefundTransaction(
+		bet.UserID, wallet.ID, amount, original, bet.ID,
+	)
+	if err := repoTx.CreateTransaction(ctx, refundTx); err != nil {
+		return fmt.Errorf("create refund ledger transaction: %w", err)
+	}
+
+	// 3) credit + persist wallet
+	if err := wallet.Credit(amount); err != nil {
+		return fmt.Errorf("in-memory wallet credit for refund: %w", err)
+	}
+	if err := repoTx.UpdateWallet(ctx, wallet); err != nil {
+		return fmt.Errorf("update wallet record for refund: %w", err)
+	}
+
+	// 4) adjust pools
+	if bet.MarketOutcome != nil {
+		m := bet.Market
+		o := bet.MarketOutcome
+		m.TotalPoolAmount = m.TotalPoolAmount.Sub(amount)
+		o.PoolAmount = o.PoolAmount.Sub(amount)
+
+		if err := repoTx.UpdateMarket(ctx, m); err != nil {
+			return fmt.Errorf("update market pool on refund: %w", err)
+		}
+		if err := repoTx.UpdateMarketOutcome(ctx, o); err != nil {
+			return fmt.Errorf("update outcome pool on refund: %w", err)
+		}
+	} else {
+		log.Printf(
+			"Warning: MarketOutcome data missing for bet %s during refund; pools not adjusted.",
+			bet.ID,
+		)
+	}
+
+	return nil
 }
 
 // GetBetByID returns a specific bet, ensuring ownership.
@@ -636,94 +671,111 @@ func (s *service) GetUserPortfolio(ctx context.Context, userID uuid.UUID) (*Port
 }
 
 // GetUserBettingStats returns detailed betting statistics.
-func (s *service) GetUserBettingStats(ctx context.Context, userID uuid.UUID) (*BettingStatsResponse, error) {
+// --- in service.go ---
+
+func (s *service) GetUserBettingStats(
+	ctx context.Context,
+	userID uuid.UUID,
+) (*BettingStatsResponse, error) {
 	filters := &BetFilters{Page: 1, PerPage: s.config.MaxBetsForStatsCalculation}
-	bets, totalBetsCount, err := s.repo.GetBetsByUser(ctx, userID, filters)
+	bets, totalCount, err := s.repo.GetBetsByUser(ctx, userID, filters)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user bets for stats: %w", err)
 	}
 
 	stats := &BettingStatsResponse{
 		UserID:    userID,
-		TotalBets: int(totalBetsCount),
+		TotalBets: int(totalCount),
 	}
-
 	if len(bets) == 0 {
 		return stats, nil
 	}
 
-	totalAmount := decimal.Zero
-	totalWinningsOnSettled := decimal.Zero
-	totalLossesOnSettled := decimal.Zero
-	largestWinAmount := decimal.Zero
-	largestLossAmount := decimal.Zero
-	wonBetsCount := 0
-	lostBetsCount := 0
-	pendingBetsCount := 0
+	agg := aggregateBetStats(bets)
 
-	for i := range bets {
-		bet := &bets[i]
-		totalAmount = totalAmount.Add(bet.Amount)
+	stats.FirstBetAt = agg.FirstBetAt
+	stats.LastBetAt = agg.LastBetAt
+	stats.TotalAmount = agg.TotalAmount
+	stats.WonBets = agg.Won
+	stats.LostBets = agg.Lost
+	stats.PendingBets = agg.Pending
+	stats.TotalWinnings = agg.Winnings
+	stats.TotalLosses = agg.Losses
+	stats.NetProfit = agg.Winnings.Sub(agg.Losses)
+	stats.LargestWin = agg.MaxWin
+	stats.LargestLoss = agg.MaxLoss
 
-		if stats.FirstBetAt.IsZero() || bet.CreatedAt.Before(stats.FirstBetAt) {
-			stats.FirstBetAt = bet.CreatedAt
-		}
-		if bet.CreatedAt.After(stats.LastBetAt) {
-			stats.LastBetAt = bet.CreatedAt
-		}
-
-		switch bet.Status {
-		case models.BetStatusSettled:
-			if bet.SettlementAmount != nil {
-				betProfitLoss := bet.SettlementAmount.Sub(bet.Amount)
-				if betProfitLoss.GreaterThan(decimal.Zero) {
-					wonBetsCount++
-					totalWinningsOnSettled = totalWinningsOnSettled.Add(betProfitLoss)
-					if betProfitLoss.GreaterThan(largestWinAmount) {
-						largestWinAmount = betProfitLoss
-					}
-				} else if betProfitLoss.LessThan(decimal.Zero) {
-					lostBetsCount++
-					currentLoss := betProfitLoss.Abs()
-					totalLossesOnSettled = totalLossesOnSettled.Add(currentLoss)
-					if currentLoss.GreaterThan(largestLossAmount) {
-						largestLossAmount = currentLoss
-					}
-				}
-			}
-		case models.BetStatusActive:
-			pendingBetsCount++
-		case models.BetStatusRefunded:
-			break
-		}
+	if settled := agg.Won + agg.Lost; settled > 0 {
+		stats.WinRate = decimal.NewFromInt(int64(agg.Won)).
+			Div(decimal.NewFromInt(int64(settled))).
+			Mul(decimal.NewFromInt(100))
 	}
+	stats.AverageBetSize = agg.TotalAmount.Div(decimal.NewFromInt(totalCount))
+	stats.ROI = stats.NetProfit.
+		Div(agg.TotalAmount).
+		Mul(decimal.NewFromInt(100))
 
-	stats.TotalAmount = totalAmount
-	stats.WonBets = wonBetsCount
-	stats.LostBets = lostBetsCount
-	stats.PendingBets = pendingBetsCount
-	stats.TotalWinnings = totalWinningsOnSettled
-	stats.TotalLosses = totalLossesOnSettled
-	stats.NetProfit = totalWinningsOnSettled.Sub(totalLossesOnSettled)
-	stats.LargestWin = largestWinAmount
-	stats.LargestLoss = largestLossAmount
-
-	totalSettledBets := wonBetsCount + lostBetsCount
-	if totalSettledBets > 0 {
-		stats.WinRate = decimal.NewFromInt(int64(wonBetsCount)).Div(decimal.NewFromInt(int64(totalSettledBets))).Mul(decimal.NewFromInt(100))
-	}
-
-	if totalBetsCount > 0 {
-		stats.AverageBetSize = totalAmount.Div(decimal.NewFromInt(totalBetsCount))
-	}
-
-	if totalAmount.GreaterThan(decimal.Zero) {
-		stats.ROI = stats.NetProfit.Div(totalAmount).Mul(decimal.NewFromInt(100))
-	}
 	return stats, nil
 }
 
-// Helper methods
+type betAgg struct {
+	FirstBetAt time.Time
+	LastBetAt  time.Time
+
+	TotalAmount        decimal.Decimal
+	Won, Lost, Pending int
+
+	Winnings, Losses decimal.Decimal
+	MaxWin, MaxLoss  decimal.Decimal
+}
+
+func aggregateBetStats(bets []models.Bet) *betAgg {
+	agg := &betAgg{
+		TotalAmount: decimal.Zero,
+		Winnings:    decimal.Zero,
+		Losses:      decimal.Zero,
+		MaxWin:      decimal.Zero,
+		MaxLoss:     decimal.Zero,
+	}
+
+	for i := range bets {
+		b := bets[i]
+		agg.TotalAmount = agg.TotalAmount.Add(b.Amount)
+
+		if agg.FirstBetAt.IsZero() || b.CreatedAt.Before(agg.FirstBetAt) {
+			agg.FirstBetAt = b.CreatedAt
+		}
+		if b.CreatedAt.After(agg.LastBetAt) {
+			agg.LastBetAt = b.CreatedAt
+		}
+
+		switch b.Status {
+		case models.BetStatusSettled:
+			if b.SettlementAmount == nil {
+				continue
+			}
+			pnl := b.SettlementAmount.Sub(b.Amount)
+			if pnl.GreaterThan(decimal.Zero) {
+				agg.Won++
+				agg.Winnings = agg.Winnings.Add(pnl)
+				if pnl.GreaterThan(agg.MaxWin) {
+					agg.MaxWin = pnl
+				}
+			} else if pnl.LessThan(decimal.Zero) {
+				loss := pnl.Abs()
+				agg.Lost++
+				agg.Losses = agg.Losses.Add(loss)
+				if loss.GreaterThan(agg.MaxLoss) {
+					agg.MaxLoss = loss
+				}
+			}
+		case models.BetStatusActive:
+			agg.Pending++
+		}
+	}
+
+	return agg
+}
 
 // getUserByID is a placeholder. In a real app, this would fetch from a user repository.
 func (s *service) getUserByID(_ context.Context, userID uuid.UUID) *models.User {

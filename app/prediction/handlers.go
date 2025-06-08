@@ -52,12 +52,12 @@ func (h *Handler) PlaceBet(c *gin.Context) {
 
 	var req PlaceBetRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		api.ValidationErrorResponse(c, h.formatValidationErrors(err))
+		api.BadRequestResponse(c, h.formatValidationErrors(err))
 		return
 	}
 
 	if err := h.validator.Struct(&req); err != nil {
-		api.ValidationErrorResponse(c, h.formatValidationErrors(err))
+		api.BadRequestResponse(c, h.formatValidationErrors(err))
 		return
 	}
 
@@ -105,12 +105,12 @@ func (h *Handler) GetBetQuote(c *gin.Context) {
 
 	var req BetQuoteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		api.ValidationErrorResponse(c, h.formatValidationErrors(err))
+		api.BadRequestResponse(c, h.formatValidationErrors(err))
 		return
 	}
 
 	if err := h.validator.Struct(&req); err != nil {
-		api.ValidationErrorResponse(c, h.formatValidationErrors(err))
+		api.BadRequestResponse(c, h.formatValidationErrors(err))
 		return
 	}
 
@@ -159,7 +159,7 @@ func (h *Handler) GetMyBets(c *gin.Context) {
 
 	var filters BetFilters
 	if err := c.ShouldBindQuery(&filters); err != nil {
-		api.ValidationErrorResponse(c, err.Error())
+		api.BadRequestResponse(c, err.Error())
 		return
 	}
 
@@ -206,7 +206,7 @@ func (h *Handler) GetBetByID(c *gin.Context) {
 	idParam := c.Param("id")
 	betID, err := uuid.Parse(idParam)
 	if err != nil {
-		api.ValidationErrorResponse(c, "Invalid bet ID format")
+		api.BadRequestResponse(c, "Invalid bet ID format")
 		return
 	}
 
@@ -252,7 +252,7 @@ func (h *Handler) CancelBet(c *gin.Context) {
 	idParam := c.Param("id")
 	betID, err := uuid.Parse(idParam)
 	if err != nil {
-		api.ValidationErrorResponse(c, "Invalid bet ID format")
+		api.BadRequestResponse(c, "Invalid bet ID format")
 		return
 	}
 
@@ -384,26 +384,26 @@ func (h *Handler) GetPriceImpact(c *gin.Context) {
 	marketIDParam := c.Param("market_id")
 	marketID, err := uuid.Parse(marketIDParam)
 	if err != nil {
-		api.ValidationErrorResponse(c, "Invalid market ID format")
+		api.BadRequestResponse(c, "Invalid market ID format")
 		return
 	}
 
 	outcomeIDParam := c.Param("outcome_id")
 	outcomeID, err := uuid.Parse(outcomeIDParam)
 	if err != nil {
-		api.ValidationErrorResponse(c, "Invalid outcome ID format")
+		api.BadRequestResponse(c, "Invalid outcome ID format")
 		return
 	}
 
 	amountStr := c.Query("amount")
 	if amountStr == "" {
-		api.ValidationErrorResponse(c, "Amount parameter is required")
+		api.BadRequestResponse(c, "Amount parameter is required")
 		return
 	}
 
 	amount, err := parseDecimal(amountStr)
 	if err != nil {
-		api.ValidationErrorResponse(c, "Invalid amount format")
+		api.BadRequestResponse(c, "Invalid amount format")
 		return
 	}
 

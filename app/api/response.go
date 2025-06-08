@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joefazee/neo/internal/validator"
 )
 
 // Response represents a standardized API response
@@ -80,8 +81,12 @@ func ErrorResponse(c *gin.Context,
 }
 
 // ValidationErrorResponse sends a validation error response
-func ValidationErrorResponse(c *gin.Context, details interface{}) {
-	ErrorResponse(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request data", details)
+func ValidationErrorResponse(c *gin.Context, errors *validator.ValidationError) {
+	ErrorResponse(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request data", errors.Fields)
+}
+
+func BadRequestResponse(c *gin.Context, message any) {
+	ErrorResponse(c, http.StatusBadRequest, "BAD_REQUEST", "Invalid request data", message)
 }
 
 // NotFoundResponse sends a not found error response

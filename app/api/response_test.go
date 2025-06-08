@@ -73,7 +73,7 @@ func TestAPIResponses(t *testing.T) {
 		c, _ := gin.CreateTestContext(w)
 
 		details := "Invalid email format"
-		ValidationErrorResponse(c, details)
+		BadRequestResponse(c, details)
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 

@@ -77,7 +77,7 @@ func (h *Handler) GetCountryByID(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		api.ValidationErrorResponse(c, "Invalid country ID format")
+		api.BadRequestResponse(c, "Invalid country ID format")
 		return
 	}
 
@@ -109,7 +109,7 @@ func (h *Handler) GetCountryByID(c *gin.Context) {
 func (h *Handler) GetCountryByCode(c *gin.Context) {
 	code := c.Param("code")
 	if len(code) != 3 {
-		api.ValidationErrorResponse(c, "Country code must be 3 characters")
+		api.BadRequestResponse(c, "Country code must be 3 characters")
 		return
 	}
 
@@ -142,7 +142,7 @@ func (h *Handler) GetCountryByCode(c *gin.Context) {
 func (h *Handler) CreateCountry(c *gin.Context) {
 	var req CreateCountryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		api.ValidationErrorResponse(c, err.Error())
+		api.BadRequestResponse(c, err.Error())
 		return
 	}
 
@@ -152,7 +152,7 @@ func (h *Handler) CreateCountry(c *gin.Context) {
 			errors.Is(err, models.ErrInvalidCountryName) ||
 			errors.Is(err, models.ErrInvalidCurrencyCode) ||
 			errors.Is(err, models.ErrInvalidCurrencySymbol) {
-			api.ValidationErrorResponse(c, err.Error())
+			api.BadRequestResponse(c, err.Error())
 			return
 		}
 		api.InternalErrorResponse(c, "Failed to create country")
@@ -181,13 +181,13 @@ func (h *Handler) UpdateCountry(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		api.ValidationErrorResponse(c, "Invalid country ID format")
+		api.BadRequestResponse(c, "Invalid country ID format")
 		return
 	}
 
 	var req UpdateCountryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		api.ValidationErrorResponse(c, err.Error())
+		api.BadRequestResponse(c, err.Error())
 		return
 	}
 
@@ -199,7 +199,7 @@ func (h *Handler) UpdateCountry(c *gin.Context) {
 		}
 		if errors.Is(err, models.ErrInvalidCountryName) ||
 			errors.Is(err, models.ErrInvalidCurrencySymbol) {
-			api.ValidationErrorResponse(c, err.Error())
+			api.BadRequestResponse(c, err.Error())
 			return
 		}
 		api.InternalErrorResponse(c, "Failed to update country")
@@ -227,7 +227,7 @@ func (h *Handler) DeleteCountry(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		api.ValidationErrorResponse(c, "Invalid country ID format")
+		api.BadRequestResponse(c, "Invalid country ID format")
 		return
 	}
 

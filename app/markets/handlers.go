@@ -28,7 +28,7 @@ func (h *Handler) parseUUIDFromParam(c *gin.Context, paramName string) (uuid.UUI
 	param := c.Param(paramName)
 	id, err := uuid.Parse(param)
 	if err != nil {
-		api.ValidationErrorResponse(c, "Invalid "+paramName+" format")
+		api.BadRequestResponse(c, "Invalid "+paramName+" format")
 		return uuid.Nil, false
 	}
 	return id, true
@@ -37,7 +37,7 @@ func (h *Handler) parseUUIDFromParam(c *gin.Context, paramName string) (uuid.UUI
 // bindJSONRequest binds JSON request body to the provided struct
 func (h *Handler) bindJSONRequest(c *gin.Context, req interface{}) bool {
 	if err := c.ShouldBindJSON(req); err != nil {
-		api.ValidationErrorResponse(c, err.Error())
+		api.BadRequestResponse(c, err.Error())
 		return false
 	}
 	return true
@@ -50,7 +50,7 @@ func (h *Handler) handleServiceError(c *gin.Context, err error, entityName, oper
 		return
 	}
 	if h.isValidationError(err) {
-		api.ValidationErrorResponse(c, err.Error())
+		api.BadRequestResponse(c, err.Error())
 		return
 	}
 	api.InternalErrorResponse(c, "Failed to "+operation)
@@ -103,7 +103,7 @@ func (h *Handler) executeWithUUIDAndServiceCall(
 func (h *Handler) GetMarkets(c *gin.Context) {
 	var filters MarketFilters
 	if err := c.ShouldBindQuery(&filters); err != nil {
-		api.ValidationErrorResponse(c, err.Error())
+		api.BadRequestResponse(c, err.Error())
 		return
 	}
 
@@ -325,7 +325,7 @@ func (h *Handler) VoidMarket(c *gin.Context) {
 
 	reason := c.Query("reason")
 	if reason == "" {
-		api.ValidationErrorResponse(c, "Void reason is required")
+		api.BadRequestResponse(c, "Void reason is required")
 		return
 	}
 
