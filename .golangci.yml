@@ -1,0 +1,190 @@
+run:
+  timeout: 5m
+  issues-exit-code: 1
+  tests: true
+  go: "1.24"
+
+output:
+  formats:
+    - format: colored-line-number
+      print-issued-lines: true
+      print-linter-name: true
+
+linters:
+  enable:
+    # Security linters
+    - gosec           # Security issues
+    - gocritic        # Performance and style issues
+    - gocyclo         # Cyclomatic complexity
+    - goimports       # Import formatting
+    - revive          # Replacement for deprecated golint
+    - ineffassign     # Detect ineffectual assignments
+    - misspell        # Spell checking
+    - unconvert       # Remove unnecessary type conversions
+    - unparam         # Unused function parameters
+    - unused          # Unused constants, variables, functions and types
+    - bodyclose       # HTTP response body close
+    - noctx           # HTTP request without context
+    - rowserrcheck    # SQL rows.Err() checking
+    - sqlclosecheck   # SQL close() checking
+    - errcheck        # Unchecked errors
+    - govet           # Vet examines Go source code
+    - staticcheck     # Static analysis
+    - typecheck       # Type checking
+
+    # Code quality
+    - dupl            # Code duplication
+    - gofmt           # Code formatting
+    - prealloc        # Slice preallocation
+    - nolintlint      # Ill-formed nolint directives
+
+    # Performance
+    - nakedret        # Naked returns in functions
+
+    # Maintainability
+    - funlen          # Function length
+    - lll             # Line length
+    - nestif          # Nested if statements
+    - whitespace      # Whitespace issues
+
+  disable:
+    - wsl             # Whitespace linter (too opinionated)
+    - nlreturn        # Return statements (too strict)
+    - godox           # TODO/FIXME comments (allow during development)
+
+linters-settings:
+  gosec:
+    # Security severity
+    severity: medium
+    confidence: medium
+    excludes:
+      - G104 # Audit errors not checked (we handle this explicitly)
+    config:
+      G301: "0644"  # File permissions
+      G302: "0644"  # File permissions
+      G306: "0644"  # File permissions
+
+  gocyclo:
+    min-complexity: 16
+
+  funlen:
+    lines: 80
+    statements: 50
+
+  lll:
+    line-length: 160
+
+  misspell:
+    locale: US
+
+  nestif:
+    min-complexity: 8
+
+  dupl:
+    threshold: 100
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - dupImport # https://github.com/go-critic/go-critic/issues/845
+      - ifElseChain
+      - octalLiteral
+      - whyNoLint
+      - wrapperFunc
+
+  govet:
+    enable:
+      - shadow
+    settings:
+      printf:
+        funcs:
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Infof
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Warnf
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Errorf
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Fatalf
+
+  revive:
+    min-confidence: 0
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+      - name: empty-block
+      - name: superfluous-else
+      - name: unused-parameter
+      - name: unreachable-code
+      - name: redefines-builtin-id
+
+  staticcheck:
+    checks: ["all"]
+
+issues:
+  exclude-dirs:
+    - vendor
+    - bin
+    - docs
+  exclude-files:
+    - ".*\\.pb\\.go$"
+    - ".*_mock\\.go$"
+  uniq-by-line: true
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false
+
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - funlen
+        - lll
+
+    # Exclude known linter issues
+    - path: "migrations/"
+      linters:
+        - gocritic
+        - revive
+        - staticcheck
+
+    # Exclude shadow checking for err variables
+    - text: "declaration of \"err\" shadows declaration"
+      linters:
+        - govet
+
+    # Exclude some staticcheck messages
+    - linters:
+        - staticcheck
+      text: "SA9003:"
+
+    # Exclude lll issues for long lines with go:generate
+    - linters:
+        - lll
+      source: "^//go:generate "
+
+severity:
+  default-severity: error
+  case-sensitive: false

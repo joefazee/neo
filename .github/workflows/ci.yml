@@ -1,0 +1,209 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  quality-checks:
+    name: Quality & Security Checks
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: secret
+          POSTGRES_USER: neo
+          POSTGRES_DB: neo_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+          
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.24.3'
+        cache: true
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Install dependencies
+      run: go mod download
+
+    - name: Verify dependencies
+      run: go mod verify
+
+    - name: Install tools
+      run: |
+        go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+        go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+        go install github.com/sonatypeoss/nancy@latest
+        go install honnef.co/go/tools/cmd/staticcheck@latest
+
+    - name: Format check
+      run: |
+        gofmt -d .
+        if [ "$(gofmt -d . | wc -l)" -gt 0 ]; then
+          echo "Code is not properly formatted"
+          exit 1
+        fi
+
+    - name: Lint
+      run: golangci-lint run --config .golangci.yml --timeout 5m
+
+    - name: Security scan with gosec
+      run: |
+        gosec -fmt=json -out=gosec-report.json ./...
+        gosec -fmt=sarif -out=gosec.sarif ./...
+
+    - name: Upload SARIF file
+      if: always()
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: gosec.sarif
+
+    - name: Staticcheck
+      run: staticcheck ./...
+
+    - name: Check for vulnerabilities
+      run: go list -json -deps ./... | nancy sleuth
+
+    - name: Run tests
+      env:
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_USER: neo
+        DB_PASSWORD: secret
+        DB_NAME: neo_test
+        DB_SSL_MODE: disable
+        REDIS_URL: redis://localhost:6379
+        JWT_SECRET: test-secret-key
+        GO_ENV: test
+      run: |
+        go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+    - name: Generate coverage report
+      run: go tool cover -html=coverage.out -o coverage.html
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.out
+        flags: unittests
+        name: codecov-umbrella
+
+    - name: Check test coverage
+      run: |
+        COVERAGE=$(go tool cover -func=coverage.out | grep total | grep -Eo '[0-9]+\.[0-9]+')
+        echo "Total coverage: $COVERAGE%"
+        if (( $(echo "$COVERAGE < 70.0" | bc -l) )); then
+          echo "Coverage is below 70%"
+          exit 1
+        fi
+
+    - name: Build application
+      run: |
+        go build -v -o bin/neo-api ./cmd/api
+        go build -v -o bin/neo-migrate ./cmd/migrations
+
+    - name: Docker build test
+      run: |
+        docker build -t neo-api:test .
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: quality-checks
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.24.3'
+
+    - name: Start services
+      run: |
+        docker-compose up -d postgres redis
+        sleep 10
+
+    - name: Run integration tests
+      env:
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_USER: neo
+        DB_PASSWORD: secret
+        DB_NAME: neo_dev
+        DB_SSL_MODE: disable
+        REDIS_URL: redis://localhost:6379
+        JWT_SECRET: test-secret-key
+        GO_ENV: test
+      run: |
+        go test -v -tags=integration ./...
+
+    - name: Cleanup
+      if: always()
+      run: docker-compose down -v
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.24'
+
+    - name: Run comprehensive security audit
+      run: |
+        go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+        go install github.com/sonatypeoss/nancy@latest
+        
+        # Full security scan
+        gosec -fmt=json -out=security-report.json ./...
+        
+        # Dependency vulnerability check
+        go list -json -deps ./... | nancy sleuth -output=json > nancy-report.json
+
+    - name: Upload security artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-reports
+        path: |
+          security-report.json
+          nancy-report.json
+          gosec.sarif

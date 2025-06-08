@@ -1,0 +1,91 @@
+repos:
+  - repo: local
+    hooks:
+      - id: go-fmt
+        name: go fmt
+        entry: gofmt
+        language: system
+        args: [-w]
+        files: \.go$
+
+      - id: go-imports
+        name: go imports
+        entry: goimports
+        language: system
+        args: [-w]
+        files: \.go$
+
+      - id: go-mod-tidy
+        name: go mod tidy
+        entry: bash -c 'go mod tidy && git diff --exit-code go.mod go.sum'
+        language: system
+        files: (go\.mod|go\.sum)$
+        pass_filenames: false
+
+      - id: go-vet
+        name: go vet
+        entry: go vet
+        language: system
+        files: \.go$
+        pass_filenames: false
+        args: [./...]
+
+      - id: golangci-lint
+        name: golangci-lint
+        entry: golangci-lint run
+        language: system
+        files: \.go$
+        pass_filenames: false
+        args: [--config, .golangci.yml, --timeout, 5m]
+
+      - id: gosec
+        name: gosec security check
+        entry: gosec
+        language: system
+        files: \.go$
+        pass_filenames: false
+        args: [-quiet, ./...]
+
+      - id: go-test
+        name: go test
+        entry: bash -c 'go test -race -short ./...'
+        language: system
+        files: \.go$
+        pass_filenames: false
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-executables-have-shebangs
+      - id: detect-private-key
+
+  - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
+    rev: 0.2.3
+    hooks:
+      - id: yamlfmt
+        args: [--mapping, '2', --sequence, '4', --offset, '2']
+
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+        args: [--ignore, DL3008, --ignore, DL3009]
+
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit hooks
+    
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false

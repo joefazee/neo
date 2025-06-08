@@ -1,0 +1,132 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+coverage.xml
+coverage.out
+
+# Go workspace file
+go.work
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.staging
+.env.production
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*.bak
+*.backup
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Docker volumes
+postgres_data/
+redis_data/
+localstack_data/
+prometheus_data/
+grafana_data/
+
+# Documentation build
+docs/_build/
+site/
+docs
+
+# Security scan results
+security-report.txt
+gosec-report.json
+nancy-report.txt
+
+# Test results
+test-results.xml
+junit.xml
+
+# Performance profiles
+*.prof
+*.pprof
+
+# Dependencies
+vendor/
+
+# Generated files
+*.pb.go
+*_mock.go
+mocks/
+
+# Build artifacts
+build/
+release/
+
+# Air live reload
+.air.toml
+tmp/
+
+# Upload directories
+uploads/
+files/
+
+# Static files
+static/
+public/
+
+# Configuration secrets
+config/secrets/
+secrets/
+
+sandbox/
+
+
+# Kubernetes
+*.kubeconfig
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Local development
+.localstack/
+.dev/
+
+
+reports/deps-graph.svg
