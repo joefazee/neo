@@ -3,6 +3,8 @@ package user
 import (
 	"net/http"
 
+	"github.com/joefazee/neo/internal/sanitizer"
+
 	"github.com/joefazee/neo/app/countries"
 	"github.com/joefazee/neo/internal/validator"
 
@@ -14,11 +16,12 @@ import (
 type Handler struct {
 	service           Service
 	countryRepository countries.Repository
+	s                 sanitizer.HTMLStripperer
 }
 
 // NewHandler creates a new user handler
-func NewHandler(service Service, countryRepository countries.Repository) *Handler {
-	return &Handler{service: service, countryRepository: countryRepository}
+func NewHandler(service Service, countryRepository countries.Repository, s sanitizer.HTMLStripperer) *Handler {
+	return &Handler{service: service, countryRepository: countryRepository, s: s}
 }
 
 // Register godoc
@@ -40,7 +43,7 @@ func (h *Handler) Register(c *gin.Context) {
 	}
 
 	v := validator.New()
-	if !req.Validate(c, v, h.countryRepository) {
+	if !req.Validate(c, v, h.countryRepository, h.s) {
 		api.ValidationErrorResponse(c, validator.NewValidationError("Validation failed", v.Errors))
 		return
 	}
@@ -70,6 +73,12 @@ func (h *Handler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		api.BadRequestResponse(c, err.Error())
+		return
+	}
+
+	v := validator.New()
+	if !req.Validate(c, v, h.countryRepository, h.s) {
+		api.ValidationErrorResponse(c, validator.NewValidationError("Validation failed", v.Errors))
 		return
 	}
 

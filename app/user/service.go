@@ -37,7 +37,7 @@ func (s *service) Register(ctx context.Context, req *RegisterUserRequest) (*Resp
 		Email:        req.Email,
 		Phone:        req.PhoneNumber,
 		PasswordHash: hashedPassword,
-		CountryID:    uuid.MustParse("65a8ad97-b196-4b32-b82b-9d3bc6b74e95"),
+		CountryID:    req.CountryID,
 	}
 
 	if err := s.repo.Create(ctx, user); err != nil {
@@ -92,8 +92,6 @@ func (s *service) Login(ctx context.Context, req *LoginRequest) (*LoginResponse,
 			ID:        user.ID,
 			FirstName: user.FirstName,
 			LastName:  user.LastName,
-			Email:     user.Email,
-			Phone:     user.Phone,
 			CreatedAt: user.CreatedAt,
 		},
 	}, nil

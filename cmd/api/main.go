@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/joefazee/neo/internal/sanitizer"
+
 	"github.com/joefazee/neo/internal/cache"
 	"github.com/joefazee/neo/internal/security"
 
@@ -65,6 +67,7 @@ func main() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
+	HTMLSanitizer := sanitizer.NewHTMLStripper()
 	cacheService := cache.NewCache[string](cache.MemoryBackend, nil)
 	userRepo := user.NewRepository(db)
 	authService := user.NewAuthService(userRepo, cacheService)
@@ -82,7 +85,7 @@ func main() {
 	authGroup.Use(user.AuthMiddleware(tokenMaker, authService))
 
 	mountWithAuth(authGroup, db)
-	mountWithoutAuth(apiV1, db, cfg, tokenMaker)
+	mountWithoutAuth(apiV1, db, cfg, tokenMaker, HTMLSanitizer)
 	apiDoc.Init(r)
 
 	log.Printf("Starting Neo API server on %s:%s", cfg.AppHost, cfg.AppPort)
@@ -103,11 +106,17 @@ func mountWithAuth(r *gin.RouterGroup, db *gorm.DB) {
 	prediction.Init(r, prediction.Dependencies{DB: db, Config: nil})
 }
 
-func mountWithoutAuth(r *gin.RouterGroup, db *gorm.DB, cfg *app.Config, maker security.Maker) {
+func mountWithoutAuth(r *gin.RouterGroup,
+	db *gorm.DB,
+	cfg *app.Config,
+	maker security.Maker,
+	sanitizer sanitizer.HTMLStripperer,
+) {
 	r.GET("/healthz", api.HealthCheck)
 	user.Init(r, user.Dependencies{
 		DB:         db,
 		TokenMaker: maker,
 		Config:     &cfg.User,
+		Sanitizer:  sanitizer,
 	})
 }
