@@ -1,8 +1,6 @@
 package user
 
 import (
-	"log"
-
 	"github.com/joefazee/neo/app/countries"
 
 	"github.com/gin-gonic/gin"
@@ -11,29 +9,16 @@ import (
 )
 
 type Dependencies struct {
-	DB     *gorm.DB
-	Config *Config
+	DB         *gorm.DB
+	Config     *Config
+	TokenMaker security.Maker
 }
 
 func Init(r *gin.RouterGroup, deps Dependencies) {
-	config := deps.Config
-	if config == nil {
-		config = GetDefaultConfig()
-	}
-
-	if err := config.Validate(); err != nil {
-		panic("Invalid user configuration: " + err.Error())
-	}
-
 	repo := NewRepository(deps.DB)
 
-	tokenMaker, err := security.NewPasetoMaker(config.SymmetricKey)
-	if err != nil {
-		log.Fatal("cannot create token maker: %w", err)
-	}
-
 	countryRepo := countries.NewRepository(deps.DB)
-	srv := NewService(repo, tokenMaker)
+	srv := NewService(repo, deps.TokenMaker)
 	handler := NewHandler(srv, countryRepo)
 
 	userGroup := r.Group("/users")

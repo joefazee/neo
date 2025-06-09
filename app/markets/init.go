@@ -2,6 +2,7 @@ package markets
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/joefazee/neo/app/api"
 	"gorm.io/gorm"
 )
 
@@ -42,7 +43,7 @@ func Init(r *gin.RouterGroup, deps Dependencies) {
 	marketsGroup.GET("", handler.GetMarkets)
 	marketsGroup.GET("/my", handler.GetMyMarkets)
 	marketsGroup.GET("/:id", handler.GetMarketByID)
-	marketsGroup.POST("", handler.CreateMarket)
+	marketsGroup.POST("", api.Can("market:create"), handler.CreateMarket)
 	marketsGroup.PUT("/:id", handler.UpdateMarket)
 	marketsGroup.DELETE("/:id", handler.DeleteMarket)
 

@@ -3,6 +3,8 @@ package user
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	"github.com/joefazee/neo/models"
 	"gorm.io/gorm"
 )
@@ -34,4 +36,16 @@ func (r *repository) GetByPhone(ctx context.Context, phone string) (*models.User
 
 func (r *repository) Update(ctx context.Context, user *models.User) error {
 	return r.db.WithContext(ctx).Save(user).Error
+}
+
+func (r *repository) AssignRole(ctx context.Context, userID, roleID uuid.UUID) error {
+	return r.db.WithContext(ctx).Exec("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", userID, roleID).Error
+}
+
+func (r *repository) GetByIDWithPermissions(ctx context.Context, userID uuid.UUID) (*models.User, error) {
+	var user models.User
+	err := r.db.WithContext(ctx).
+		Preload("Roles.Permissions").
+		First(&user, "id = ?", userID).Error
+	return &user, err
 }

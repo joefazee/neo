@@ -121,3 +121,7 @@ func (s *service) ResetPassword(_ context.Context, _, _ string) error {
 	// 5. Invalidate the reset token
 	return nil
 }
+
+func (s *service) AssignRole(ctx context.Context, userID, roleID uuid.UUID) error {
+	return s.repo.AssignRole(ctx, userID, roleID)
+}

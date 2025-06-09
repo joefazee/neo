@@ -3,6 +3,8 @@ package user
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	"github.com/joefazee/neo/models"
 )
 
@@ -11,6 +13,8 @@ type Repository interface {
 	GetByEmail(ctx context.Context, email string) (*models.User, error)
 	GetByPhone(ctx context.Context, phone string) (*models.User, error)
 	Update(ctx context.Context, user *models.User) error
+	AssignRole(ctx context.Context, userID, roleID uuid.UUID) error
+	GetByIDWithPermissions(ctx context.Context, userID uuid.UUID) (*models.User, error)
 }
 
 type Service interface {
@@ -18,4 +22,5 @@ type Service interface {
 	Login(ctx context.Context, req *LoginRequest) (*LoginResponse, error)
 	RequestPasswordReset(ctx context.Context, email string) error
 	ResetPassword(ctx context.Context, token, newPassword string) error
+	AssignRole(ctx context.Context, userID, roleID uuid.UUID) error
 }

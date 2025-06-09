@@ -81,7 +81,7 @@ func TestAPIResponses(t *testing.T) {
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.False(t, response.Success)
-		assert.Equal(t, "VALIDATION_ERROR", response.Error.Code)
+		assert.Equal(t, "BAD_REQUEST", response.Error.Code)
 		assert.Equal(t, "Invalid request data", response.Error.Message)
 	})
 

@@ -66,3 +66,30 @@ func New(c *Config) (*gorm.DB, error) {
 
 	return db, nil
 }
+
+func SeedRolesAndPermissions(db *gorm.DB) error {
+	permissions := []models.Permission{
+		{Name: "users:create", Description: "Can create new users"},
+		{Name: "users:read", Description: "Can read user data"},
+		{Name: "users:update", Description: "Can update user data"},
+		{Name: "users:delete", Description: "Can delete users"},
+		{Name: "roles:assign", Description: "Can assign roles to users"},
+		{Name: "market:create", Description: "Can create new markets"},
+	}
+	db.Create(&permissions)
+
+	adminRole := models.Role{Name: "admin", Description: "Administrator with all permissions"}
+	db.Create(&adminRole)
+	err := db.Model(&adminRole).Association("Permissions").Append(&permissions)
+	if err != nil {
+		return fmt.Errorf("failed to assign permissions to admin role: %w", err)
+	}
+
+	userRole := models.Role{Name: "user", Description: "Standard user with basic permissions"}
+	db.Create(&userRole)
+	userReadPermission := models.Permission{}
+	db.First(&userReadPermission, "name = ?", "users:read")
+	err = db.Model(&userRole).Association("Permissions").Append(&userReadPermission)
+
+	return err
+}

@@ -191,7 +191,7 @@ CREATE TABLE payment_transactions
 -- Audit logs for security
 CREATE TABLE audit_logs
 (
-    id            UUID PRIMARY KEY         DEFAULT uuid_generate_v4(),
+    id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id       UUID REFERENCES users (id),
     action        VARCHAR(50) NOT NULL,
     resource_type VARCHAR(50) NOT NULL,
@@ -211,6 +211,38 @@ CREATE TABLE token_blacklist
     user_id    UUID                     NOT NULL REFERENCES users (id),
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE roles
+(
+    id          UUID PRIMARY KEY         DEFAULT uuid_generate_v4(),
+    name        VARCHAR(50)  NOT NULL UNIQUE,
+    description TEXT,
+    created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE permissions
+(
+    id          UUID PRIMARY KEY         DEFAULT uuid_generate_v4(),
+    name        VARCHAR(50)  NOT NULL UNIQUE, -- e.g., "users:create", "markets:edit"
+    description TEXT,
+    created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE role_permissions
+(
+    role_id       UUID NOT NULL REFERENCES roles (id) ON DELETE CASCADE,
+    permission_id UUID NOT NULL REFERENCES permissions (id) ON DELETE CASCADE,
+    PRIMARY KEY (role_id, permission_id)
+);
+
+CREATE TABLE user_roles
+(
+    user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    role_id UUID NOT NULL REFERENCES roles (id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, role_id)
 );
 
 -- Indexes for performance
@@ -239,7 +271,7 @@ CREATE INDEX idx_token_blacklist_expires_at ON token_blacklist (expires_at);
 
 -- Insert default Nigeria country
 INSERT INTO countries (name, code, currency_code, currency_symbol, config)
-VALUES ('Nigeria', 'NGA', 'NGN', '₦', '{
+VALUES ('Nigeria', 'NG', 'NGN', '₦', '{
   "contract_unit": 100,
   "min_bet": 100,
   "max_bet": 50000,
@@ -259,4 +291,4 @@ FROM countries c,
              ('Cryptocurrency', 'crypto', 'Price predictions, regulatory decisions, platform updates', 3),
              ('Nigerian Tech', 'nigerian-tech', 'Local startup funding, policy changes, market developments',
               4)) AS category_data(name, slug, description, sort_order)
-WHERE c.code = 'NGA';
+WHERE c.code = 'NG';

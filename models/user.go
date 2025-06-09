@@ -56,7 +56,7 @@ type User struct {
 	CountryID           uuid.UUID    `gorm:"type:uuid;not null;index" json:"country_id"`
 	Email               string       `gorm:"type:varchar(255);not null;unique;index" json:"email"`
 	EmailVerifiedAt     *time.Time   `gorm:"type:timestamptz" json:"email_verified_at"`
-	PasswordHash        string       `gorm:"type:varchar(255);not null" json:"-"` // Never expose password
+	PasswordHash        string       `gorm:"type:varchar(255);not null" json:"-"`
 	FirstName           string       `gorm:"type:varchar(100)" json:"first_name"`
 	LastName            string       `gorm:"type:varchar(100)" json:"last_name"`
 	Phone               string       `gorm:"type:varchar(20)" json:"phone"`
@@ -67,7 +67,7 @@ type User struct {
 	KYCReference        string       `gorm:"type:varchar(100)" json:"kyc_reference"`
 	KYCVerifiedAt       *time.Time   `gorm:"type:timestamptz" json:"kyc_verified_at"`
 	TwoFactorEnabled    bool         `gorm:"default:false" json:"two_factor_enabled"`
-	TwoFactorSecret     string       `gorm:"type:varchar(255)" json:"-"` // Never expose 2FA secret
+	TwoFactorSecret     string       `gorm:"type:varchar(255)" json:"-"`
 	LastLoginAt         *time.Time   `gorm:"type:timestamptz" json:"last_login_at"`
 	LastLoginIP         net.IP       `gorm:"type:inet" json:"last_login_ip"`
 	FailedLoginAttempts int          `gorm:"default:0" json:"failed_login_attempts"`
@@ -77,7 +77,7 @@ type User struct {
 	CreatedAt           time.Time    `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt           time.Time    `gorm:"autoUpdateTime" json:"updated_at"`
 
-	// Associations
+	Roles               []Role               `gorm:"many2many:user_roles;"`
 	Country             *Country             `gorm:"foreignKey:CountryID" json:"country,omitempty"`
 	Wallets             []Wallet             `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"wallets,omitempty"`
 	Bets                []Bet                `gorm:"foreignKey:UserID" json:"-"`
@@ -226,4 +226,8 @@ func HashPassword(password string) (string, error) {
 		return "", err
 	}
 	return string(hash), nil
+}
+
+func (u *User) IsAnonymous() bool {
+	return u.ID == uuid.Nil
 }
