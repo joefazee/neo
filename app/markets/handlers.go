@@ -2,24 +2,36 @@ package markets
 
 import (
 	"errors"
+	"net/http"
 	"strings"
+
+	"github.com/joefazee/neo/app/countries"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
 	"github.com/joefazee/neo/app/api"
+	"github.com/joefazee/neo/app/categories"
+	"github.com/joefazee/neo/internal/sanitizer"
+	"github.com/joefazee/neo/internal/validator"
 	"github.com/joefazee/neo/models"
 )
 
 // Handler handles HTTP requests for markets
 type Handler struct {
-	service Service
+	service      Service
+	countryRepo  countries.Repository
+	categoryRepo categories.Repository
+	sanitizer    sanitizer.HTMLStripperer
 }
 
 // NewHandler creates a new market handler
-func NewHandler(service Service) *Handler {
+func NewHandler(service Service, countryRepo countries.Repository, categoryRepo categories.Repository, sanitizer sanitizer.HTMLStripperer) *Handler {
 	return &Handler{
-		service: service,
+		service:      service,
+		countryRepo:  countryRepo,
+		categoryRepo: categoryRepo,
+		sanitizer:    sanitizer,
 	}
 }
 
@@ -85,6 +97,7 @@ func (h *Handler) executeWithUUIDAndServiceCall(
 // @Tags markets
 // @Accept json
 // @Produce json
+// @Security BearerAuth
 // @Param country_id query string false "Filter by country ID"
 // @Param category_id query string false "Filter by category ID"
 // @Param creator_id query string false "Filter by creator ID"
@@ -110,6 +123,11 @@ func (h *Handler) GetMarkets(c *gin.Context) {
 	result, err := h.service.GetMarkets(c.Request.Context(), &filters)
 	if err != nil {
 		api.InternalErrorResponse(c, "Failed to fetch markets")
+		return
+	}
+
+	if len(result.Markets) == 0 {
+		api.SuccessResponseWithMeta(c, http.StatusOK, "No markets found", nil, api.PaginationMeta{})
 		return
 	}
 
@@ -160,7 +178,7 @@ func (h *Handler) GetMarketByID(c *gin.Context) {
 // @Success 200 {object} api.Response{data=[]MarketResponse}
 // @Failure 400 {object} api.Response{error=api.ErrorInfo}
 // @Failure 500 {object} api.Response{error=api.ErrorInfo}
-// @Router /api/v1/categories/{category_id}/markets [get]
+// @Router /api/v1/markets/category/{category_id} [get]
 func (h *Handler) GetMarketsByCategory(c *gin.Context) {
 	categoryID, ok := h.parseUUIDFromParam(c, "category_id")
 	if !ok {
@@ -217,9 +235,51 @@ func (h *Handler) GetMyMarkets(c *gin.Context) {
 // @Failure 401 {object} api.Response{error=api.ErrorInfo}
 // @Failure 500 {object} api.Response{error=api.ErrorInfo}
 // @Router /api/v1/markets [post]
+//
+//	@Example request body {
+//		"country_id": "550e8400-e29b-41d4-a716-446655440000",
+//		"category_id": "550e8400-e29b-41d4-a716-446655440001",
+//		"title": "Will OpenAI release GPT-5 by end of 2024?",
+//		"description": "This market resolves to YES if OpenAI officially announces and releases GPT-5
+//				(or equivalent next-generation model) by December 31, 2024. The model must be generally
+//					available to the public, not just in limited beta. Announcements without actual release do not count.",
+//		"market_type": "binary",
+//		"close_time": "2024-12-31T23:59:59Z",
+//		"resolution_deadline": "2025-01-07T23:59:59Z",
+//		"min_bet_amount": "100.00",
+//		"max_bet_amount": "10000.00",
+//		"outcomes": [
+//			{
+//				"outcome_key": "yes",
+//				"outcome_label": "Yes, GPT-5 will be released",
+//				"sort_order": 1
+//			},
+//			{
+//				"outcome_key": "no",
+//				"outcome_label": "No, GPT-5 will not be released",
+//				"sort_order": 2
+//			}
+//		],
+//		"safeguard_config": {
+//			"min_quorum_amount": "5000.00",
+//			"min_outcomes": 2,
+//			"house_bot_enabled": true,
+//			"house_bot_amount": "2000.00",
+//			"imbalance_threshold": "0.80",
+//			"void_on_quorum_fail": true
+//		},
+//		"tags": ["ai", "openai", "gpt", "technology"]
+//	}
 func (h *Handler) CreateMarket(c *gin.Context) {
 	var req CreateMarketRequest
 	if !h.bindJSONRequest(c, &req) {
+		return
+	}
+
+	// Validate the request
+	v := validator.New()
+	if !req.Validate(c.Request.Context(), v, h.countryRepo, h.categoryRepo, h.sanitizer) {
+		api.ValidationErrorResponse(c, validator.NewValidationError("Validation failed", v.Errors))
 		return
 	}
 

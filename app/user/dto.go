@@ -5,10 +5,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/joefazee/neo/app/countries"
+
 	"github.com/joefazee/neo/internal/formatter"
 	"github.com/joefazee/neo/internal/sanitizer"
 
-	"github.com/joefazee/neo/app/countries"
 	"github.com/joefazee/neo/internal/validator"
 
 	"github.com/google/uuid"

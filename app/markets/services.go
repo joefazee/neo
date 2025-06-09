@@ -96,24 +96,19 @@ func (s *service) GetMyMarkets(ctx context.Context, userID uuid.UUID) ([]MarketR
 
 // CreateMarket creates a new prediction market
 func (s *service) CreateMarket(ctx context.Context, req *CreateMarketRequest) (*MarketDetailResponse, error) {
-	if err := s.validateMarketTiming(req.CloseTime, req.ResolutionDeadline); err != nil {
-		return nil, err
-	}
+	// The request has already been validated and sanitized by the handler
 
-	if err := s.validateOutcomes(req.Outcomes); err != nil {
-		return nil, err
-	}
-
+	// Create the market model
 	market := &models.Market{
 		CountryID:           req.CountryID,
 		CategoryID:          req.CategoryID,
-		Title:               strings.TrimSpace(req.Title),
-		Description:         strings.TrimSpace(req.Description),
+		Title:               req.Title,
+		Description:         req.Description,
 		MarketType:          models.MarketType(req.MarketType),
 		Status:              models.MarketStatusDraft,
 		CloseTime:           req.CloseTime,
 		ResolutionDeadline:  req.ResolutionDeadline,
-		MinBetAmount:        s.getMinBetAmount(req.MinBetAmount),
+		MinBetAmount:        req.MinBetAmount,
 		MaxBetAmount:        req.MaxBetAmount,
 		RakePercentage:      s.getRakePercentage(req.RakePercentage),
 		CreatorRevenueShare: s.getCreatorRevenueShare(req.CreatorRevenueShare),
@@ -127,14 +122,13 @@ func (s *service) CreateMarket(ctx context.Context, req *CreateMarketRequest) (*
 		market.CreatorID = &creatorID
 	}
 
-	// Validate market
+	// Final validation of the market model
 	if err := market.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("market validation failed: %w", err)
 	}
 
-	// Create market in transaction
-	err := s.repo.Create(ctx, market)
-	if err != nil {
+	// Create market in database
+	if err := s.repo.Create(ctx, market); err != nil {
 		return nil, fmt.Errorf("failed to create market: %w", err)
 	}
 
@@ -142,11 +136,12 @@ func (s *service) CreateMarket(ctx context.Context, req *CreateMarketRequest) (*
 	for i, outcomeReq := range req.Outcomes {
 		outcome := &models.MarketOutcome{
 			MarketID:     market.ID,
-			OutcomeKey:   strings.ToLower(strings.TrimSpace(outcomeReq.OutcomeKey)),
-			OutcomeLabel: strings.TrimSpace(outcomeReq.OutcomeLabel),
+			OutcomeKey:   outcomeReq.OutcomeKey,
+			OutcomeLabel: outcomeReq.OutcomeLabel,
 			SortOrder:    outcomeReq.SortOrder,
 		}
 
+		// Set default sort order if not provided
 		if outcome.SortOrder == 0 {
 			outcome.SortOrder = i + 1
 		}
@@ -189,7 +184,7 @@ func (s *service) UpdateMarket(ctx context.Context, id uuid.UUID, req *UpdateMar
 
 	// Validate updated market
 	if err := market.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("market validation failed: %w", err)
 	}
 
 	// Save updates
@@ -442,55 +437,7 @@ func (s *service) ProcessExpiredMarkets(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) validateMarketTiming(closeTime, resolutionDeadline time.Time) error {
-	now := time.Now()
-
-	if closeTime.Before(now.Add(s.config.MinMarketDuration)) {
-		return fmt.Errorf("market close time must be at least %v from now", s.config.MinMarketDuration)
-	}
-
-	if closeTime.After(now.Add(s.config.MaxMarketDuration)) {
-		return fmt.Errorf("market close time cannot be more than %v from now", s.config.MaxMarketDuration)
-	}
-
-	if resolutionDeadline.Before(closeTime.Add(time.Hour)) {
-		return errors.New("resolution deadline must be at least 1 hour after close time")
-	}
-
-	return nil
-}
-
-func (s *service) validateOutcomes(outcomes []CreateOutcomeRequest) error {
-	if len(outcomes) < 2 {
-		return errors.New("market must have at least 2 outcomes")
-	}
-
-	if len(outcomes) > 10 {
-		return errors.New("market cannot have more than 10 outcomes")
-	}
-
-	keys := make(map[string]bool)
-	for _, outcome := range outcomes {
-		key := strings.ToLower(strings.TrimSpace(outcome.OutcomeKey))
-		if keys[key] {
-			return errors.New("duplicate outcome keys not allowed")
-		}
-		keys[key] = true
-
-		if outcome.OutcomeKey == "" || outcome.OutcomeLabel == "" {
-			return errors.New("outcome key and label are required")
-		}
-	}
-
-	return nil
-}
-
-func (s *service) getMinBetAmount(amount decimal.Decimal) decimal.Decimal {
-	if amount.IsZero() {
-		return s.config.MinBetAmount
-	}
-	return amount
-}
+// Helper methods
 
 func (s *service) getRakePercentage(percentage *decimal.Decimal) decimal.Decimal {
 	if percentage == nil {

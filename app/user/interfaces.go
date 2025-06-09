@@ -15,6 +15,11 @@ type Repository interface {
 	Update(ctx context.Context, user *models.User) error
 	AssignRole(ctx context.Context, userID, roleID uuid.UUID) error
 	GetByIDWithPermissions(ctx context.Context, userID uuid.UUID) (*models.User, error)
+
+	GetByID(ctx context.Context, userID uuid.UUID) (*models.User, error)
+	GetUsers(ctx context.Context, filters *AdminUserFilters) ([]models.User, int64, error)
+	UpdateUserStatus(ctx context.Context, userID uuid.UUID, isActive bool) error
+	BulkAssignPermissions(ctx context.Context, userIDs, permissionIDs []uuid.UUID) error
 }
 
 type Service interface {

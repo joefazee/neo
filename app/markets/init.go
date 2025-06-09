@@ -3,13 +3,17 @@ package markets
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/joefazee/neo/app/api"
+	"github.com/joefazee/neo/app/categories"
+	"github.com/joefazee/neo/app/countries"
+	"github.com/joefazee/neo/internal/sanitizer"
 	"gorm.io/gorm"
 )
 
 // Dependencies represents the dependencies needed for the markets module
 type Dependencies struct {
-	DB     *gorm.DB
-	Config *Config
+	DB        *gorm.DB
+	Config    *Config
+	Sanitizer sanitizer.HTMLStripperer
 }
 
 // Init initializes the markets module and mounts routes
@@ -29,14 +33,16 @@ func Init(r *gin.RouterGroup, deps Dependencies) {
 	pe := NewPricingEngine(config)
 	se := NewSafeguardEngine(config)
 
-	// Initialize repository
+	// Initialize repositories
 	repo := NewRepository(deps.DB)
+	countryRepo := countries.NewRepository(deps.DB)
+	categoryRepo := categories.NewRepository(deps.DB)
 
 	// Initialize service
 	srvs := NewService(repo, config, pe, se)
 
-	// Initialize handler
-	handler := NewHandler(srvs)
+	// Initialize handler with all dependencies
+	handler := NewHandler(srvs, countryRepo, categoryRepo, deps.Sanitizer)
 
 	// Mount main market routes
 	marketsGroup := r.Group("/markets")
@@ -63,5 +69,6 @@ func Init(r *gin.RouterGroup, deps Dependencies) {
 	outcomesGroup.PUT("/:outcome_id", handler.UpdateMarketOutcome)
 	outcomesGroup.DELETE("/:outcome_id", handler.DeleteMarketOutcome)
 
-	marketsGroup.GET("/categories/:category_id/markets", handler.GetMarketsByCategory)
+	// Mount category-specific market routes
+	marketsGroup.GET("/category/:category_id", handler.GetMarketsByCategory)
 }

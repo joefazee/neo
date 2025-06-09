@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
+	"github.com/joefazee/neo/internal/logger"
 	"github.com/joefazee/neo/internal/sanitizer"
 
 	"github.com/joefazee/neo/internal/cache"
@@ -24,6 +26,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+)
+
+// build time variables
+var (
+	buildTime string
+	version   string
 )
 
 // @title Neo API
@@ -61,6 +69,15 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to load configuration:", err)
 	}
+	host, _ := os.Hostname()
+
+	zeroLogger := logger.NewZeroLogger(os.Stdout, logger.LevelInfo, map[string]interface{}{
+		"env":       cfg.Env,
+		"version":   version,
+		"buildTime": buildTime,
+		"service":   "api",
+		"host":      host,
+	})
 
 	db, err := database.New(&cfg.DB)
 	if err != nil {
@@ -71,6 +88,7 @@ func main() {
 	cacheService := cache.NewCache[string](cache.MemoryBackend, nil)
 	userRepo := user.NewRepository(db)
 	authService := user.NewAuthService(userRepo, cacheService)
+	countryRepo := countries.NewRepository(db)
 
 	tokenMaker, err := security.NewPasetoMaker(cfg.User.SymmetricKey)
 	if err != nil {
@@ -84,8 +102,18 @@ func main() {
 	authGroup := apiV1.Group("/")
 	authGroup.Use(user.AuthMiddleware(tokenMaker, authService))
 
-	mountWithAuth(authGroup, db)
-	mountWithoutAuth(apiV1, db, cfg, tokenMaker, HTMLSanitizer)
+	userDependencies := &user.Dependencies{
+		DB:          db,
+		TokenMaker:  tokenMaker,
+		Config:      &cfg.User,
+		Sanitizer:   HTMLSanitizer,
+		Logger:      zeroLogger,
+		UserRepo:    userRepo,
+		CountryRepo: countryRepo,
+	}
+
+	mountWithAuth(authGroup, userDependencies, HTMLSanitizer)
+	mountWithoutAuth(apiV1, userDependencies)
 	apiDoc.Init(r)
 
 	log.Printf("Starting Neo API server on %s:%s", cfg.AppHost, cfg.AppPort)
@@ -94,29 +122,32 @@ func main() {
 	}
 }
 
-func mountWithAuth(r *gin.RouterGroup, db *gorm.DB) {
+func mountWithAuth(r *gin.RouterGroup, userDeps *user.Dependencies, sanitizer sanitizer.HTMLStripperer) {
 	deps := struct {
 		DB *gorm.DB
 	}{
-		DB: db,
+		DB: userDeps.DB,
 	}
 	countries.Init(r, deps)
-	categories.Init(r, deps)
-	markets.Init(r, markets.Dependencies{DB: db, Config: nil})
-	prediction.Init(r, prediction.Dependencies{DB: db, Config: nil})
+	markets.Init(r, markets.Dependencies{
+		DB:        deps.DB,
+		Config:    nil,
+		Sanitizer: sanitizer,
+	})
+	prediction.Init(r, prediction.Dependencies{DB: userDeps.DB, Config: nil})
+	user.InitAdmin(r, userDeps)
 }
 
 func mountWithoutAuth(r *gin.RouterGroup,
-	db *gorm.DB,
-	cfg *app.Config,
-	maker security.Maker,
-	sanitizer sanitizer.HTMLStripperer,
+	userDeps *user.Dependencies,
 ) {
+	deps := struct {
+		DB *gorm.DB
+	}{
+		DB: userDeps.DB,
+	}
 	r.GET("/healthz", api.HealthCheck)
-	user.Init(r, user.Dependencies{
-		DB:         db,
-		TokenMaker: maker,
-		Config:     &cfg.User,
-		Sanitizer:  sanitizer,
-	})
+	user.Init(r, userDeps)
+	categories.InitWithAuth(r, deps)
+	categories.Init(r, deps)
 }

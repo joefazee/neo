@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-
+	"github.com/joefazee/neo/app/api"
 	"github.com/joefazee/neo/models"
 )
 
@@ -22,18 +22,26 @@ func NewHandler(service Service) *Handler {
 	}
 }
 
-// GetCategoriesByCountry handles GET /countries/:countryId/categories
+// GetCategoriesByCountry godoc
+// @Summary      List categories by country
+// @Description  Get a list of all categories for a specific country, with an option to fetch only active ones.
+// @Tags         Categories
+// @Accept       json
+// @Produce      json
+// @Param        countryId path      string  true  "Country ID"
+// @Param        active    query     boolean false "Filter for active categories"
+// @Success      200       {object}  api.Response{data=[]CategoryResponse}
+// @Failure      400       {object}  api.Response{error=api.ErrorInfo}
+// @Failure      500       {object}  api.Response{error=api.ErrorInfo}
+// @Router       /api/v1/categories/c/{countryId} [get]
 func (h *Handler) GetCategoriesByCountry(c *gin.Context) {
 	countryIDParam := c.Param("countryId")
 	countryID, err := uuid.Parse(countryIDParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid country ID format",
-		})
+		api.BadRequestResponse(c, "Invalid country ID format")
 		return
 	}
 
-	// Check if we should only return active categories
 	activeOnly := c.Query("active") == "true"
 
 	var categories []CategoryResponse
@@ -44,98 +52,107 @@ func (h *Handler) GetCategoriesByCountry(c *gin.Context) {
 	}
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to fetch categories",
-		})
+		api.InternalErrorResponse(c, "Failed to fetch categories")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": categories,
-		"meta": gin.H{
-			"count":       len(categories),
-			"country_id":  countryID,
-			"active_only": activeOnly,
-		},
-	})
+	meta := gin.H{
+		"count":       len(categories),
+		"country_id":  countryID,
+		"active_only": activeOnly,
+	}
+	api.SuccessResponseWithMeta(c, http.StatusOK, "Categories retrieved successfully", categories, meta)
 }
 
-// GetCategoryByID handles GET /categories/:id
+// GetCategoryByID godoc
+// @Summary      Get a single category by ID
+// @Description  Retrieves the details of a specific category using its UUID.
+// @Tags         Categories
+// @Accept       json
+// @Produce      json
+// @Param        id  path      string  true  "Category ID"
+// @Success      200 {object}  api.Response{data=CategoryWithCountryResponse}
+// @Failure      400 {object}  api.Response{error=api.ErrorInfo}
+// @Failure      404 {object}  api.Response{error=api.ErrorInfo}
+// @Failure      500 {object}  api.Response{error=api.ErrorInfo}
+// @Router       /api/v1/categories/{id} [get]
 func (h *Handler) GetCategoryByID(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid category ID format",
-		})
+		api.BadRequestResponse(c, "Invalid category ID format")
 		return
 	}
 
 	category, err := h.service.GetCategoryByID(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, models.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error": "Category not found",
-			})
+			api.NotFoundResponse(c, "Category")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to fetch category",
-		})
+		api.InternalErrorResponse(c, "Failed to fetch category")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": category,
-	})
+	api.SuccessResponse(c, http.StatusOK, "Category retrieved successfully", category)
 }
 
-// GetCategoryBySlug handles GET /countries/:countryId/categories/:slug
+// GetCategoryBySlug godoc
+// @Summary      Get a category by slug
+// @Description  Retrieves a category using its slug for a specific country.
+// @Tags         Categories
+// @Accept       json
+// @Produce      json
+// @Param        countryId path      string  true  "Country ID"
+// @Param        slug      path      string  true  "Category Slug"
+// @Success      200       {object}  api.Response{data=CategoryWithCountryResponse}
+// @Failure      400       {object}  api.Response{error=api.ErrorInfo}
+// @Failure      404       {object}  api.Response{error=api.ErrorInfo}
+// @Failure      500       {object}  api.Response{error=api.ErrorInfo}
+// @Router       /api/v1/countries/{countryId}/categories/{slug} [get]
 func (h *Handler) GetCategoryBySlug(c *gin.Context) {
 	countryIDParam := c.Param("countryId")
 	countryID, err := uuid.Parse(countryIDParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid country ID format",
-		})
+		api.BadRequestResponse(c, "Invalid country ID format")
 		return
 	}
 
 	slug := c.Param("slug")
 	if slug == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Category slug is required",
-		})
+		api.BadRequestResponse(c, "Category slug is required")
 		return
 	}
 
 	category, err := h.service.GetCategoryBySlug(c.Request.Context(), countryID, slug)
 	if err != nil {
 		if errors.Is(err, models.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error": "Category not found",
-			})
+			api.NotFoundResponse(c, "Category")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to fetch category",
-		})
+		api.InternalErrorResponse(c, "Failed to fetch category")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": category,
-	})
+	api.SuccessResponse(c, http.StatusOK, "Category retrieved successfully", category)
 }
 
-// CreateCategory handles POST /categories
+// CreateCategory godoc
+// @Summary      Create a new category
+// @Description  Adds a new category for a specific country.
+// @Tags         Categories
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request body      CreateCategoryRequest true  "Create Category Request"
+// @Success      201       {object}  api.Response{data=CategoryResponse}
+// @Failure      400       {object}  api.Response{error=api.ErrorInfo}
+// @Failure      500       {object}  api.Response{error=api.ErrorInfo}
+// @Router       /api/v1/categories [post]
 func (h *Handler) CreateCategory(c *gin.Context) {
 	var req CreateCategoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Invalid request data",
-			"details": err.Error(),
-		})
+		api.BadRequestResponse(c, err.Error())
 		return
 	}
 
@@ -144,91 +161,91 @@ func (h *Handler) CreateCategory(c *gin.Context) {
 		if errors.Is(err, models.ErrInvalidCountryID) ||
 			errors.Is(err, models.ErrInvalidCategoryName) ||
 			errors.Is(err, models.ErrInvalidCategorySlug) {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": err.Error(),
-			})
+			api.BadRequestResponse(c, err.Error())
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to create category",
-		})
+		api.InternalErrorResponse(c, "Failed to create category")
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
-		"data": category,
-	})
+	api.CreatedResponse(c, "Category created successfully", category)
 }
 
-// UpdateCategory handles PUT /categories/:id
+// UpdateCategory godoc
+// @Summary      Update a category
+// @Description  Updates an existing category's details.
+// @Tags         Categories
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id      path      string               true  "Category ID"
+// @Param        request body      UpdateCategoryRequest true  "Update Category Request"
+// @Success      200     {object}  api.Response{data=CategoryResponse}
+// @Failure      400     {object}  api.Response{error=api.ErrorInfo}
+// @Failure      404     {object}  api.Response{error=api.ErrorInfo}
+// @Failure      500     {object}  api.Response{error=api.ErrorInfo}
+// @Router       /api/v1/categories/{id} [put]
 func (h *Handler) UpdateCategory(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid category ID format",
-		})
+		api.BadRequestResponse(c, "Invalid category ID format")
 		return
 	}
 
 	var req UpdateCategoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Invalid request data",
-			"details": err.Error(),
-		})
+		api.BadRequestResponse(c, err.Error())
 		return
 	}
 
 	category, err := h.service.UpdateCategory(c.Request.Context(), id, req)
 	if err != nil {
 		if errors.Is(err, models.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error": "Category not found",
-			})
+			api.NotFoundResponse(c, "Category")
 			return
 		}
 		if errors.Is(err, models.ErrInvalidCategoryName) {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": err.Error(),
-			})
+			api.BadRequestResponse(c, err.Error())
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to update category",
-		})
+		api.InternalErrorResponse(c, "Failed to update category")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": category,
-	})
+	api.UpdatedResponse(c, "Category updated successfully", category)
 }
 
-// DeleteCategory handles DELETE /categories/:id
+// DeleteCategory godoc
+// @Summary      Delete a category
+// @Description  Deletes a category by its ID.
+// @Tags         Categories
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id  path      string  true  "Category ID"
+// @Success      204 {object}  api.Response
+// @Failure      400 {object}  api.Response{error=api.ErrorInfo}
+// @Failure      404 {object}  api.Response{error=api.ErrorInfo}
+// @Failure      500 {object}  api.Response{error=api.ErrorInfo}
+// @Router       /api/v1/categories/{id} [delete]
 func (h *Handler) DeleteCategory(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid category ID format",
-		})
+		api.BadRequestResponse(c, "Invalid category ID format")
 		return
 	}
 
 	err = h.service.DeleteCategory(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, models.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error": "Category not found",
-			})
+			api.NotFoundResponse(c, "Category")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to delete category",
-		})
+		api.InternalErrorResponse(c, "Failed to delete category")
 		return
 	}
 
-	c.JSON(http.StatusNoContent, nil)
+	c.Status(http.StatusNoContent)
 }

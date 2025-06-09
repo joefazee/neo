@@ -3,9 +3,12 @@ package user
 import (
 	"net/http"
 
+	"github.com/joefazee/neo/app/countries"
+
+	"github.com/joefazee/neo/internal/logger"
+
 	"github.com/joefazee/neo/internal/sanitizer"
 
-	"github.com/joefazee/neo/app/countries"
 	"github.com/joefazee/neo/internal/validator"
 
 	"github.com/gin-gonic/gin"
@@ -17,11 +20,16 @@ type Handler struct {
 	service           Service
 	countryRepository countries.Repository
 	s                 sanitizer.HTMLStripperer
+	lg                logger.Logger
 }
 
 // NewHandler creates a new user handler
-func NewHandler(service Service, countryRepository countries.Repository, s sanitizer.HTMLStripperer) *Handler {
-	return &Handler{service: service, countryRepository: countryRepository, s: s}
+func NewHandler(service Service,
+	countryRepository countries.Repository,
+	s sanitizer.HTMLStripperer,
+	lg logger.Logger,
+) *Handler {
+	return &Handler{service: service, countryRepository: countryRepository, s: s, lg: lg}
 }
 
 // Register godoc
@@ -87,6 +95,8 @@ func (h *Handler) Login(c *gin.Context) {
 		api.UnauthorizedResponse(c)
 		return
 	}
+
+	h.lg.Info("User logged in", nil)
 
 	api.SuccessResponse(c, http.StatusOK, "Login successful", resp)
 }
