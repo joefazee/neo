@@ -152,3 +152,7 @@ func (h *Handler) ResetPassword(c *gin.Context) {
 
 	api.SuccessResponse(c, http.StatusOK, "Password reset successfully", nil)
 }
+
+func (h *Handler) GetProfile(c *gin.Context) {
+	api.SuccessResponse(c, http.StatusOK, "User profile retrieved successfully", nil)
+}

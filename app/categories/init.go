@@ -1,47 +1,49 @@
+// app/categories/init.go
 package categories
 
 import (
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
+	"github.com/joefazee/neo/internal/deps"
 )
 
-// Dependencies represent the dependencies needed for the categories module
-type Dependencies struct {
-	DB *gorm.DB
-}
+const (
+	CategoryRepoKey    = "category_repository"
+	CategoryServiceKey = "category_service"
+)
 
-// Init initializes the categories module and mounts routes
-func Init(r *gin.RouterGroup, deps Dependencies) {
-	// Initialize repository
-	repo := NewRepository(deps.DB)
+// MountPublic mounts public category routes
+func MountPublic(r *gin.RouterGroup, container *deps.Container) {
+	handler := createHandler(container)
 
-	// Initialize service
-	srvs := NewService(repo)
-
-	// Initialize handler
-	handler := NewHandler(srvs)
-
-	// Mount standalone category routes
 	categoriesGroup := r.Group("/categories")
 	categoriesGroup.GET("/:id", handler.GetCategoryByID)
 	categoriesGroup.GET("/c/:countryId", handler.GetCategoriesByCountry)
 	categoriesGroup.GET("/c/:countryId/:slug", handler.GetCategoryBySlug)
 }
 
-// Init initializes the categories module and mounts routes
-func InitWithAuth(r *gin.RouterGroup, deps Dependencies) {
-	// Initialize repository
-	repo := NewRepository(deps.DB)
+// MountAuthenticated mounts authenticated category routes
+func MountAuthenticated(r *gin.RouterGroup, container *deps.Container) {
+	handler := createHandler(container)
 
-	// Initialize service
-	srvs := NewService(repo)
-
-	// Initialize handler
-	handler := NewHandler(srvs)
-
-	// Mount standalone category routes
 	categoriesGroup := r.Group("/categories")
 	categoriesGroup.POST("", handler.CreateCategory)
 	categoriesGroup.PUT("/:id", handler.UpdateCategory)
 	categoriesGroup.DELETE("/:id", handler.DeleteCategory)
+}
+
+// InitRepositories initializes and registers repositories and services for this module
+func InitRepositories(container *deps.Container) {
+	// Initialize repository
+	repo := NewRepository(container.DB)
+	container.RegisterRepository(CategoryRepoKey, repo)
+
+	// Initialize service
+	service := NewService(repo)
+	container.RegisterService(CategoryServiceKey, service)
+}
+
+// createHandler creates a category handler with all dependencies
+func createHandler(container *deps.Container) *Handler {
+	service := container.GetService(CategoryServiceKey).(Service)
+	return NewHandler(service)
 }

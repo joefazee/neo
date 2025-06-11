@@ -111,10 +111,5 @@ func serveElements(c *gin.Context) {
 func Init(r *gin.Engine) {
 	r.GET("/swagger/doc.json", serveSwaggerJSON)
 
-	// Documentation UIs
-
-	r.GET("/docs", func(c *gin.Context) {
-		c.Redirect(http.StatusMovedPermanently, "/docs/")
-	})
-	r.GET("/elements/*any", serveElements)
+	r.GET("/docs/*any", serveElements)
 }

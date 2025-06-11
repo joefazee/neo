@@ -3,6 +3,8 @@ package user
 import (
 	"time"
 
+	"github.com/joefazee/neo/models"
+
 	"github.com/google/uuid"
 	"github.com/joefazee/neo/internal/sanitizer"
 	"github.com/joefazee/neo/internal/validator"
@@ -64,12 +66,141 @@ func (r *AdminBulkAssignRequest) Validate(v *validator.Validator) {
 
 // AdminUserResponse is the detailed user response for admin views.
 type AdminUserResponse struct {
-	ID        uuid.UUID `json:"id"`
-	FirstName string    `json:"first_name"`
-	LastName  string    `json:"last_name"`
-	Email     string    `json:"email"`
-	Phone     string    `json:"phone"`
-	IsActive  bool      `json:"is_active"`
-	CreatedAt time.Time `json:"created_at"`
-	Roles     []string  `json:"roles,omitempty"`
+	ID              uuid.UUID        `json:"id"`
+	Email           string           `json:"email"`
+	EmailVerifiedAt *time.Time       `json:"email_verified_at"`
+	FirstName       string           `json:"first_name"`
+	LastName        string           `json:"last_name"`
+	Phone           string           `json:"phone"`
+	PhoneVerifiedAt *time.Time       `json:"phone_verified_at"`
+	DateOfBirth     *time.Time       `json:"date_of_birth"`
+	KYCStatus       models.KYCStatus `json:"kyc_status"`
+	KYCVerifiedAt   *time.Time       `json:"kyc_verified_at"`
+	LastLoginAt     *time.Time       `json:"last_login_at"`
+	IsActive        *bool            `json:"is_active"`
+	Roles           []*RoleResponse  `json:"roles"`
+	Country         *CountryInfo     `json:"country,omitempty"`
+	CreatedAt       time.Time        `json:"created_at"`
+	UpdatedAt       time.Time        `json:"updated_at"`
+}
+
+type CountryInfo struct {
+	ID             uuid.UUID `json:"id"`
+	Name           string    `json:"name"`
+	Code           string    `json:"code"`
+	CurrencyCode   string    `json:"currency_code"`
+	CurrencySymbol string    `json:"currency_symbol"`
+}
+
+// CreatePermissionRequest represents the request to create a permission
+type CreatePermissionRequest struct {
+	Name        string `json:"name" binding:"required,min=2,max=50"`
+	Description string `json:"description,omitempty"`
+}
+
+// CreateRoleRequest represents the request to create a role
+type CreateRoleRequest struct {
+	Name        string `json:"name" binding:"required,min=2,max=50"`
+	Description string `json:"description,omitempty"`
+}
+
+// UpdateRoleRequest represents the request to update a role
+type UpdateRoleRequest struct {
+	Name        *string `json:"name,omitempty" binding:"omitempty,min=2,max=50"`
+	Description *string `json:"description,omitempty"`
+}
+
+// AssignPermissionsRequest represents the request to assign permissions to a role
+type AssignPermissionsRequest struct {
+	PermissionCodes []string `json:"permission_codes" binding:"required,min=1"`
+}
+
+// RemovePermissionsRequest represents the request to remove permissions from a role
+type RemovePermissionsRequest struct {
+	PermissionCodes []string `json:"permission_codes" binding:"required,min=1"`
+}
+
+// PermissionResponse represents a permission in API responses
+type PermissionResponse struct {
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// RoleResponse represents a role in API responses
+type RoleResponse struct {
+	ID          uuid.UUID            `json:"id"`
+	Name        string               `json:"name"`
+	Description string               `json:"description"`
+	Permissions []PermissionResponse `json:"permissions"`
+	CreatedAt   time.Time            `json:"created_at"`
+	UpdatedAt   time.Time            `json:"updated_at"`
+}
+
+// ToPermissionResponse converts a models.Permission to PermissionResponse
+func ToPermissionResponse(permission *models.Permission) *PermissionResponse {
+	return &PermissionResponse{
+		ID:          permission.ID,
+		Name:        permission.Name,
+		Description: permission.Description,
+		CreatedAt:   permission.CreatedAt,
+		UpdatedAt:   permission.UpdatedAt,
+	}
+}
+
+// ToRoleResponse converts a models.Role to RoleResponse
+func ToRoleResponse(role *models.Role) *RoleResponse {
+	permissions := make([]PermissionResponse, len(role.Permissions))
+	for i, perm := range role.Permissions {
+		permissions[i] = *ToPermissionResponse(&perm)
+	}
+
+	return &RoleResponse{
+		ID:          role.ID,
+		Name:        role.Name,
+		Description: role.Description,
+		Permissions: permissions,
+		CreatedAt:   role.CreatedAt,
+		UpdatedAt:   role.UpdatedAt,
+	}
+}
+
+// ToUserResponse converts a models.User to UserResponse
+func ToUserResponse(user *models.User) *AdminUserResponse {
+	roles := make([]*RoleResponse, len(user.Roles))
+	for i, role := range user.Roles {
+		roles[i] = ToRoleResponse(&role)
+	}
+
+	response := &AdminUserResponse{
+		ID:              user.ID,
+		Email:           user.Email,
+		EmailVerifiedAt: user.EmailVerifiedAt,
+		FirstName:       user.FirstName,
+		LastName:        user.LastName,
+		Phone:           user.Phone,
+		PhoneVerifiedAt: user.PhoneVerifiedAt,
+		DateOfBirth:     user.DateOfBirth,
+		KYCStatus:       user.KYCStatus,
+		KYCVerifiedAt:   user.KYCVerifiedAt,
+		LastLoginAt:     user.LastLoginAt,
+		IsActive:        user.IsActive,
+		Roles:           roles,
+		CreatedAt:       user.CreatedAt,
+		UpdatedAt:       user.UpdatedAt,
+	}
+
+	if user.Country != nil {
+		response.Country = &CountryInfo{
+			ID:             user.Country.ID,
+			Name:           user.Country.Name,
+			Code:           user.Country.Code,
+			CurrencyCode:   user.Country.CurrencyCode,
+			CurrencySymbol: user.Country.CurrencySymbol,
+		}
+	}
+
+	return response
 }

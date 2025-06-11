@@ -1,3 +1,4 @@
+// cmd/api/main.go
 package main
 
 import (
@@ -5,33 +6,25 @@ import (
 	"log"
 	"os"
 
-	"github.com/joefazee/neo/internal/logger"
-	"github.com/joefazee/neo/internal/sanitizer"
+	"github.com/joefazee/neo/app/wallet"
 
-	"github.com/joefazee/neo/internal/cache"
-	"github.com/joefazee/neo/internal/security"
-
-	"github.com/joefazee/neo/app/user"
-
-	"github.com/joefazee/neo/app/markets"
-	"github.com/joefazee/neo/app/prediction"
-
+	"github.com/gin-gonic/gin"
 	"github.com/joefazee/neo/app"
 	"github.com/joefazee/neo/app/api"
 	"github.com/joefazee/neo/app/categories"
 	"github.com/joefazee/neo/app/countries"
 	"github.com/joefazee/neo/app/database"
 	apiDoc "github.com/joefazee/neo/app/doc"
+	"github.com/joefazee/neo/app/markets"
+	"github.com/joefazee/neo/app/prediction"
+	"github.com/joefazee/neo/app/user"
 	_ "github.com/joefazee/neo/docs"
-
-	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
-)
-
-// build time variables
-var (
-	buildTime string
-	version   string
+	"github.com/joefazee/neo/internal/cache"
+	"github.com/joefazee/neo/internal/deps"
+	"github.com/joefazee/neo/internal/logger"
+	"github.com/joefazee/neo/internal/router"
+	"github.com/joefazee/neo/internal/sanitizer"
+	"github.com/joefazee/neo/internal/security"
 )
 
 // @title Neo API
@@ -69,51 +62,41 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to load configuration:", err)
 	}
-	host, _ := os.Hostname()
 
-	zeroLogger := logger.NewZeroLogger(os.Stdout, logger.LevelInfo, map[string]interface{}{
-		"env":       cfg.Env,
-		"version":   version,
-		"buildTime": buildTime,
-		"service":   "api",
-		"host":      host,
-	})
-
+	// Initialize core dependencies
 	db, err := database.New(&cfg.DB)
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
-	HTMLSanitizer := sanitizer.NewHTMLStripper()
+	zeroLogger := logger.NewZeroLogger(os.Stdout, logger.LevelInfo, map[string]interface{}{
+		"env":     cfg.Env,
+		"service": "api",
+	})
+
+	htmlSanitizer := sanitizer.NewHTMLStripper()
 	cacheService := cache.NewCache[string](cache.MemoryBackend, nil)
-	userRepo := user.NewRepository(db)
-	authService := user.NewAuthService(userRepo, cacheService)
-	countryRepo := countries.NewRepository(db)
 
 	tokenMaker, err := security.NewPasetoMaker(cfg.User.SymmetricKey)
 	if err != nil {
-		log.Fatal("cannot create token maker: %w", err)
+		log.Fatal("cannot create token maker:", err)
 	}
+
+	container := deps.NewContainer(db, tokenMaker, htmlSanitizer, zeroLogger, cacheService)
+
+	initializeRepositories(container)
+
+	authService := user.NewAuthService(
+		container.GetRepository(user.RepoKey).(user.Repository),
+		cacheService,
+	)
+	container.RegisterService("auth_service", authService)
 
 	r := gin.Default()
+	mounter := router.NewMounter(container)
 
-	apiV1 := r.Group("/api/v1")
+	mountRoutes(r, mounter, authService, tokenMaker)
 
-	authGroup := apiV1.Group("/")
-	authGroup.Use(user.AuthMiddleware(tokenMaker, authService))
-
-	userDependencies := &user.Dependencies{
-		DB:          db,
-		TokenMaker:  tokenMaker,
-		Config:      &cfg.User,
-		Sanitizer:   HTMLSanitizer,
-		Logger:      zeroLogger,
-		UserRepo:    userRepo,
-		CountryRepo: countryRepo,
-	}
-
-	mountWithAuth(authGroup, userDependencies, HTMLSanitizer)
-	mountWithoutAuth(apiV1, userDependencies)
 	apiDoc.Init(r)
 
 	log.Printf("Starting Neo API server on %s:%s", cfg.AppHost, cfg.AppPort)
@@ -122,32 +105,40 @@ func main() {
 	}
 }
 
-func mountWithAuth(r *gin.RouterGroup, userDeps *user.Dependencies, sanitizer sanitizer.HTMLStripperer) {
-	deps := struct {
-		DB *gorm.DB
-	}{
-		DB: userDeps.DB,
-	}
-	countries.Init(r, deps)
-	markets.Init(r, markets.Dependencies{
-		DB:        deps.DB,
-		Config:    nil,
-		Sanitizer: sanitizer,
-	})
-	prediction.Init(r, prediction.Dependencies{DB: userDeps.DB, Config: nil})
-	user.InitAdmin(r, userDeps)
+func initializeRepositories(container *deps.Container) {
+	user.InitRepositories(container)
+	countries.InitRepositories(container)
+	categories.InitRepositories(container)
+	markets.InitRepositories(container)
+	prediction.InitRepositories(container)
+	wallet.InitRepositories(container)
 }
 
-func mountWithoutAuth(r *gin.RouterGroup,
-	userDeps *user.Dependencies,
-) {
-	deps := struct {
-		DB *gorm.DB
-	}{
-		DB: userDeps.DB,
-	}
-	r.GET("/healthz", api.HealthCheck)
-	user.Init(r, userDeps)
-	categories.InitWithAuth(r, deps)
-	categories.Init(r, deps)
+func mountRoutes(engine *gin.Engine, mounter *router.Mounter, authService user.AuthService, tokenMaker security.Maker) {
+	mounter.Public(engine).
+		Mount(func(r *gin.RouterGroup, _ *deps.Container) {
+			r.GET("/healthz", api.HealthCheck)
+		}).
+		Mount(countries.MountPublic).
+		Mount(categories.MountPublic).
+		Mount(markets.MountPublic).
+		Mount(user.MountPublic)
+
+	mounter.Authenticated(engine).
+		WithAuth(user.AuthMiddleware(tokenMaker, authService)).
+		Mount(countries.MountAuthenticated).
+		Mount(markets.MountAuthenticated).
+		Mount(prediction.MountAuthenticated).
+		Mount(wallet.MountAuthenticated).
+		Mount(user.MountAuthenticated)
+
+	mounter.Authorized(engine, "admin").
+		WithAuth(user.AuthMiddleware(tokenMaker, authService)).
+		WithPermission(api.Can("admin")).
+		Mount(user.MountAdmin)
+
+	mounter.Authorized(engine, "market:admin").
+		WithAuth(user.AuthMiddleware(tokenMaker, authService)).
+		WithPermission(api.Can("market:admin")).
+		Mount(markets.MountAdmin)
 }

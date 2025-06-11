@@ -111,6 +111,8 @@ CREATE TABLE wallets
     currency_code  VARCHAR(3) NOT NULL,
     balance        DECIMAL(20, 2)           DEFAULT 0.00 CHECK (balance >= 0),
     locked_balance DECIMAL(20, 2)           DEFAULT 0.00 CHECK (locked_balance >= 0),
+    is_locked     BOOLEAN                  DEFAULT false,
+    lock_reason VARCHAR(255) NOT NULL DEFAULT '',
     created_at     TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at     TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE (user_id, currency_code)

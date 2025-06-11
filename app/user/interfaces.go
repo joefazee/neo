@@ -20,6 +20,19 @@ type Repository interface {
 	GetUsers(ctx context.Context, filters *AdminUserFilters) ([]models.User, int64, error)
 	UpdateUserStatus(ctx context.Context, userID uuid.UUID, isActive bool) error
 	BulkAssignPermissions(ctx context.Context, userIDs, permissionIDs []uuid.UUID) error
+
+	CreatePermission(ctx context.Context, permission *models.Permission) error
+	GetPermissionByName(ctx context.Context, name string) (*models.Permission, error)
+	GetPermissionsByNames(ctx context.Context, names []string) ([]models.Permission, error)
+
+	CreateRole(ctx context.Context, role *models.Role) error
+	UpdateRole(ctx context.Context, role *models.Role) error
+	GetRoleByID(ctx context.Context, id uuid.UUID) (*models.Role, error)
+	AssignPermissionsToRole(ctx context.Context, roleID uuid.UUID, permissionIDs []uuid.UUID) error
+	RemovePermissionsFromRole(ctx context.Context, roleID uuid.UUID, permissionIDs []uuid.UUID) error
+
+	GetUserByIDWithRoles(ctx context.Context, id uuid.UUID) (*models.User, error)
+	RemoveRoleFromUser(ctx context.Context, userID, roleID uuid.UUID) error
 }
 
 type Service interface {

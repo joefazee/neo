@@ -135,7 +135,7 @@ func TestWallet(t *testing.T) {
 	t.Run("Validate", func(t *testing.T) {
 		validWallet := Wallet{
 			UserID:        uuid.New(),
-			CurrencyCode:  "USD",
+			CurrencyCode:  "US",
 			Balance:       decimal.NewFromFloat(1000),
 			LockedBalance: decimal.NewFromFloat(200),
 		}
@@ -148,7 +148,7 @@ func TestWallet(t *testing.T) {
 		}{
 			{"Valid Wallet", func(_ *Wallet) {}, nil},
 			{"Invalid UserID", func(w *Wallet) { w.UserID = uuid.Nil }, ErrInvalidUserID},
-			{"Invalid Currency", func(w *Wallet) { w.CurrencyCode = "US" }, ErrInvalidCurrencyCode},
+			{"Invalid Currency", func(w *Wallet) { w.CurrencyCode = "USSS" }, ErrInvalidCurrencyCode},
 			{"Negative Balance", func(w *Wallet) { w.Balance = decimal.NewFromFloat(-10) }, ErrNegativeBalance},
 			{"Negative Locked", func(w *Wallet) { w.LockedBalance = decimal.NewFromFloat(-5) }, ErrNegativeBalance},
 			{"Locked > Balance", func(w *Wallet) { w.LockedBalance = decimal.NewFromFloat(1200) }, ErrInvalidWalletBalance},

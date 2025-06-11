@@ -52,30 +52,30 @@ func (m *UserMetadata) Scan(value interface{}) error {
 
 // User represents a user in the system
 type User struct {
-	ID                  uuid.UUID    `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
-	CountryID           uuid.UUID    `gorm:"type:uuid;not null;index" json:"country_id"`
-	Email               string       `gorm:"type:varchar(255);not null;unique;index" json:"email"`
-	EmailVerifiedAt     *time.Time   `gorm:"type:timestamptz" json:"email_verified_at"`
-	PasswordHash        string       `gorm:"type:varchar(255);not null" json:"-"`
-	FirstName           string       `gorm:"type:varchar(100)" json:"first_name"`
-	LastName            string       `gorm:"type:varchar(100)" json:"last_name"`
-	Phone               string       `gorm:"type:varchar(20)" json:"phone"`
-	PhoneVerifiedAt     *time.Time   `gorm:"type:timestamptz" json:"phone_verified_at"`
-	DateOfBirth         *time.Time   `gorm:"type:date" json:"date_of_birth"`
-	KYCStatus           KYCStatus    `gorm:"type:varchar(20);default:'pending';index" json:"kyc_status"`
-	KYCProvider         string       `gorm:"type:varchar(50)" json:"kyc_provider"`
-	KYCReference        string       `gorm:"type:varchar(100)" json:"kyc_reference"`
-	KYCVerifiedAt       *time.Time   `gorm:"type:timestamptz" json:"kyc_verified_at"`
-	TwoFactorEnabled    bool         `gorm:"default:false" json:"two_factor_enabled"`
-	TwoFactorSecret     string       `gorm:"type:varchar(255)" json:"-"`
-	LastLoginAt         *time.Time   `gorm:"type:timestamptz" json:"last_login_at"`
-	LastLoginIP         net.IP       `gorm:"type:inet" json:"last_login_ip"`
-	FailedLoginAttempts int          `gorm:"default:0" json:"failed_login_attempts"`
-	LockedUntil         *time.Time   `gorm:"type:timestamptz" json:"locked_until"`
-	IsActive            *bool        `gorm:"default:true" json:"is_active"`
-	Metadata            UserMetadata `gorm:"type:jsonb;default:'{}'" json:"metadata"`
-	CreatedAt           time.Time    `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt           time.Time    `gorm:"autoUpdateTime" json:"updated_at"`
+	ID                  uuid.UUID     `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
+	CountryID           uuid.UUID     `gorm:"type:uuid;not null;index" json:"country_id"`
+	Email               string        `gorm:"type:varchar(255);not null;unique;index" json:"email"`
+	EmailVerifiedAt     *time.Time    `gorm:"type:timestamptz" json:"email_verified_at"`
+	PasswordHash        string        `gorm:"type:varchar(255);not null" json:"-"`
+	FirstName           string        `gorm:"type:varchar(100)" json:"first_name"`
+	LastName            string        `gorm:"type:varchar(100)" json:"last_name"`
+	Phone               string        `gorm:"type:varchar(20)" json:"phone"`
+	PhoneVerifiedAt     *time.Time    `gorm:"type:timestamptz" json:"phone_verified_at"`
+	DateOfBirth         *time.Time    `gorm:"type:date" json:"date_of_birth"`
+	KYCStatus           KYCStatus     `gorm:"type:varchar(20);default:'pending';index" json:"kyc_status"`
+	KYCProvider         string        `gorm:"type:varchar(50)" json:"kyc_provider"`
+	KYCReference        string        `gorm:"type:varchar(100)" json:"kyc_reference"`
+	KYCVerifiedAt       *time.Time    `gorm:"type:timestamptz" json:"kyc_verified_at"`
+	TwoFactorEnabled    bool          `gorm:"default:false" json:"two_factor_enabled"`
+	TwoFactorSecret     string        `gorm:"type:varchar(255)" json:"-"`
+	LastLoginAt         *time.Time    `gorm:"type:timestamptz" json:"last_login_at"`
+	LastLoginIP         net.IP        `gorm:"type:inet" json:"last_login_ip"`
+	FailedLoginAttempts int           `gorm:"default:0" json:"failed_login_attempts"`
+	LockedUntil         *time.Time    `gorm:"type:timestamptz" json:"locked_until"`
+	IsActive            *bool         `gorm:"default:true" json:"is_active"`
+	Metadata            *UserMetadata `gorm:"type:jsonb;default:'{}'" json:"metadata"`
+	CreatedAt           time.Time     `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt           time.Time     `gorm:"autoUpdateTime" json:"updated_at"`
 
 	Roles               []Role               `gorm:"many2many:user_roles;"`
 	Country             *Country             `gorm:"foreignKey:CountryID" json:"country,omitempty"`

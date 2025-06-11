@@ -58,7 +58,6 @@ func (s *service) Login(ctx context.Context, req *LoginRequest) (*LoginResponse,
 	var user *models.User
 	var err error
 
-	// Determine if the identity is an email or phone number
 	if models.IsEmail(req.Identity) {
 		user, err = s.repo.GetByEmail(ctx, req.Identity)
 	} else {

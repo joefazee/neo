@@ -15,10 +15,11 @@ type Wallet struct {
 	CurrencyCode  string          `gorm:"type:varchar(3);not null;index:idx_wallets_user_currency" json:"currency_code"`
 	Balance       decimal.Decimal `gorm:"type:decimal(20,2);default:0.00;check:balance >= 0" json:"balance"`
 	LockedBalance decimal.Decimal `gorm:"type:decimal(20,2);default:0.00;check:locked_balance >= 0" json:"locked_balance"`
+	IsLocked      bool            `gorm:"default:false" json:"is_locked"`
+	LockReason    string          `gorm:"type:text" json:"lock_reason,omitempty"`
 	CreatedAt     time.Time       `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt     time.Time       `gorm:"autoUpdateTime" json:"updated_at"`
 
-	// Associations
 	User         *User         `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"user,omitempty"`
 	Transactions []Transaction `gorm:"foreignKey:WalletID" json:"-"`
 }
@@ -73,6 +74,23 @@ func (w *Wallet) Credit(amount decimal.Decimal) error {
 	return nil
 }
 
+// IsOperationAllowed checks if wallet operations are allowed
+func (w *Wallet) IsOperationAllowed() bool {
+	return !w.IsLocked
+}
+
+// Lock locks the wallet with a reason
+func (w *Wallet) Lock(reason string) {
+	w.IsLocked = true
+	w.LockReason = reason
+}
+
+// Unlock unlocks the wallet
+func (w *Wallet) Unlock() {
+	w.IsLocked = false
+	w.LockReason = ""
+}
+
 // Debit removes funds from the wallet
 func (w *Wallet) Debit(amount decimal.Decimal) error {
 	if amount.LessThanOrEqual(decimal.Zero) {
@@ -103,7 +121,7 @@ func (w *Wallet) Validate() error {
 	if w.UserID == uuid.Nil {
 		return ErrInvalidUserID
 	}
-	if len(w.CurrencyCode) != 3 {
+	if len(w.CurrencyCode) != 2 {
 		return ErrInvalidCurrencyCode
 	}
 	if w.Balance.LessThan(decimal.Zero) {

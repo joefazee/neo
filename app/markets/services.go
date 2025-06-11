@@ -73,7 +73,7 @@ func (s *service) GetMarketByID(ctx context.Context, id uuid.UUID) (*MarketDetai
 func (s *service) GetMarketsByCategory(ctx context.Context, categoryID uuid.UUID) ([]MarketResponse, error) {
 	filters := MarketFilters{
 		CategoryID: &categoryID,
-		Status:     &[]models.MarketStatus{models.MarketStatusOpen}[0],
+		Status:     &[]models.MarketStatus{models.MarketStatusDraft}[0],
 	}
 
 	markets, _, err := s.repo.GetAll(ctx, &filters)
