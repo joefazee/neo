@@ -97,7 +97,6 @@ func (h *Handler) executeWithUUIDAndServiceCall(
 // @Tags markets
 // @Accept json
 // @Produce json
-// @Security BearerAuth
 // @Param country_id query string false "Filter by country ID"
 // @Param category_id query string false "Filter by category ID"
 // @Param creator_id query string false "Filter by creator ID"
@@ -131,6 +130,13 @@ func (h *Handler) GetMarkets(c *gin.Context) {
 		return
 	}
 
+	if result.Page < 1 {
+		result.Page = 1
+	}
+
+	if result.PerPage < 1 || result.PerPage > 100 {
+		result.PerPage = 20
+	}
 	meta := api.PaginationMeta{
 		Page:       result.Page,
 		PerPage:    result.PerPage,

@@ -39,7 +39,6 @@ func (s *service) GetMarkets(ctx context.Context, filters *MarketFilters) (*Mark
 		return nil, fmt.Errorf("failed to fetch markets: %w", err)
 	}
 
-	// Add current pricing to markets
 	for i := range markets {
 		s.enrichMarketWithPricing(&markets[i])
 	}
@@ -72,7 +71,7 @@ func (s *service) GetMarketByID(ctx context.Context, id uuid.UUID) (*MarketDetai
 // GetMarketsByCategory returns markets for a specific category
 func (s *service) GetMarketsByCategory(ctx context.Context, categoryID uuid.UUID) ([]MarketResponse, error) {
 	filters := MarketFilters{
-		CategoryID: &categoryID,
+		CategoryID: categoryID,
 		Status:     &[]models.MarketStatus{models.MarketStatusDraft}[0],
 	}
 

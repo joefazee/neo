@@ -307,9 +307,9 @@ type UpdateOutcomeRequest struct {
 // MarketFilters represents filters for market queries
 // @Description Filters for searching and filtering markets
 type MarketFilters struct {
-	CountryID  *uuid.UUID           `form:"country_id"`
-	CategoryID *uuid.UUID           `form:"category_id"`
-	CreatorID  *uuid.UUID           `form:"creator_id"`
+	CountryID  uuid.UUID            `form:"country_id"`
+	CategoryID uuid.UUID            `form:"category_id"`
+	CreatorID  uuid.UUID            `form:"creator_id"`
 	Status     *models.MarketStatus `form:"status"`
 	MarketType *models.MarketType   `form:"market_type"`
 	Tags       []string             `form:"tags"`

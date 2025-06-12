@@ -153,16 +153,16 @@ func (r *repository) applyFilters(query *gorm.DB, filters *MarketFilters) *gorm.
 		return query
 	}
 
-	if filters.CountryID != nil {
-		query = query.Where("country_id = ?", *filters.CountryID)
+	if filters.CountryID != uuid.Nil {
+		query = query.Where("country_id = ?", filters.CountryID)
 	}
 
-	if filters.CategoryID != nil {
-		query = query.Where("category_id = ?", *filters.CategoryID)
+	if filters.CategoryID != uuid.Nil {
+		query = query.Where("category_id = ?", filters.CategoryID)
 	}
 
-	if filters.CreatorID != nil {
-		query = query.Where("creator_id = ?", *filters.CreatorID)
+	if filters.CreatorID != uuid.Nil {
+		query = query.Where("creator_id = ?", filters.CreatorID)
 	}
 
 	if filters.Status != nil {
